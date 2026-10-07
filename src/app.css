@@ -361,6 +361,43 @@
 	border-top: 1px solid rgb(0 0 0 / 12%);
 }
 
+.pension-resource-list li.pension-resource-pot-item {
+	display: block;
+}
+
+.pension-resource-pot-header {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.pension-drawdown {
+	margin-top: 12px;
+	padding-top: 12px;
+	border-top: 1px solid rgb(0 0 0 / 10%);
+}
+
+.pension-drawdown h5 {
+	font-size: 14px;
+	font-weight: 700;
+	margin: 0 0 12px;
+}
+
+.pension-drawdown-fields {
+	gap: 16px;
+}
+
+.pension-drawdown-note,
+.pension-drawdown-result {
+	margin: 12px 0 0;
+	font-size: 14px;
+	line-height: 1.5;
+}
+
+.pension-drawdown-result {
+	font-weight: 700;
+}
+
 .pension-resource-list li > span {
 	min-width: 0;
 }

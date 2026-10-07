@@ -1,4 +1,4 @@
-export const FORMAT_VERSION = 13;
+export const FORMAT_VERSION = 14;
 
 const simpleKinds = [
 	"pot",
@@ -56,6 +56,59 @@ const propertyEquityNumbers = [
 	"monthlyEquityPayment"
 ];
 
+const drawdownNumbers = ["startAge", "annualAmount", "withdrawalRate", "customReturnRate"];
+
+export function createDrawdownOptions() {
+	return {
+		startAge: "",
+		withdrawalMethod: "amount",
+		annualAmount: "",
+		withdrawalRate: "",
+		returnMode: "cautious",
+		customReturnRate: ""
+	};
+}
+
+function restoreDrawdownOptions(value, label) {
+	assertFields(
+		value,
+		[
+			"startAge",
+			"withdrawalMethod",
+			"annualAmount",
+			"withdrawalRate",
+			"returnMode",
+			"customReturnRate"
+		],
+		label
+	);
+	if (!["amount", "percentage"].includes(value.withdrawalMethod)) {
+		throw new Error(`${label} has an unknown withdrawal method`);
+	}
+	if (!["cautious", "balanced", "optimistic", "custom"].includes(value.returnMode)) {
+		throw new Error(`${label} has an unknown return mode`);
+	}
+	const restored = {
+		withdrawalMethod: value.withdrawalMethod,
+		returnMode: value.returnMode
+	};
+	for (const field of drawdownNumbers) {
+		restored[field] = documentNumber(value[field], `${label} ${field}`) ?? "";
+	}
+	return restored;
+}
+
+function drawdownOptionsDocument(value = createDrawdownOptions()) {
+	const document = {
+		withdrawalMethod: value.withdrawalMethod,
+		returnMode: value.returnMode
+	};
+	for (const field of drawdownNumbers) {
+		document[field] = formNumber(value[field], `Drawdown ${field}`);
+	}
+	return document;
+}
+
 export function createPropertyEquity(id) {
 	return {
 		id,
@@ -81,7 +134,8 @@ export function createPersonalSavings(id) {
 		returnMode: "balanced",
 		customReturnRate: "",
 		annualFeeRate: "",
-		bonusRate: ""
+		bonusRate: "",
+		drawdown: createDrawdownOptions()
 	};
 }
 
@@ -103,7 +157,8 @@ export function createDefinedContribution(id) {
 		existingPot: "",
 		earnings: [],
 		returnMode: "balanced",
-		customReturnRate: ""
+		customReturnRate: "",
+		drawdown: createDrawdownOptions()
 	};
 }
 
@@ -194,6 +249,7 @@ export function fromDocument(document) {
 		version !== 10 &&
 		version !== 11 &&
 		version !== 12 &&
+		version !== 13 &&
 		version !== FORMAT_VERSION
 	) {
 		throw new Error("Unsupported pension draft format version");
@@ -223,6 +279,7 @@ export function fromDocument(document) {
 		const isState = version >= 10 && pension.kind === "statePension";
 		const isSavings = version >= 12 && pension.kind === "personalSavings";
 		const isPropertyEquity = version >= 13 && pension.kind === "propertyEquity";
+		const isLegacyPot = version >= 14 && pension.kind === "pot";
 		assertFields(
 			pension,
 			isDb
@@ -258,6 +315,7 @@ export function fromDocument(document) {
 							"id",
 							"kind",
 							"name",
+							...(version >= 14 ? ["drawdown"] : []),
 							...dcNumbers.filter(
 								(field) =>
 									(version >= 8 || (field !== "startAge" && field !== "endAge")) &&
@@ -268,20 +326,30 @@ export function fromDocument(document) {
 							"returnMode"
 						]
 					: isSavings
-						? ["id", "kind", "name", ...savingsNumbers, "contributionFrequency", "returnMode"]
+						? [
+								"id",
+								"kind",
+								"name",
+								...(version >= 14 ? ["drawdown"] : []),
+								...savingsNumbers,
+								"contributionFrequency",
+								"returnMode"
+							]
 						: isPropertyEquity
 							? ["id", "kind", "name", ...propertyEquityNumbers]
-							: isState
-								? [
-										"id",
-										"kind",
-										"name",
-										"qualifyingYears",
-										"qualifyingAge",
-										...(version >= 11 ? ["annualIncreaseRate"] : []),
-										"legacyAmount"
-									]
-								: ["id", "kind", "name", "amount"],
+							: isLegacyPot
+								? ["id", "kind", "name", "amount", "drawdown"]
+								: isState
+									? [
+											"id",
+											"kind",
+											"name",
+											"qualifyingYears",
+											"qualifyingAge",
+											...(version >= 11 ? ["annualIncreaseRate"] : []),
+											"legacyAmount"
+										]
+									: ["id", "kind", "name", "amount"],
 			label
 		);
 		if (
@@ -349,7 +417,11 @@ export function fromDocument(document) {
 				kind: pension.kind,
 				name: pension.name,
 				pastPotMethod: pension.pastPotMethod,
-				returnMode: pension.returnMode
+				returnMode: pension.returnMode,
+				drawdown:
+					version >= 14
+						? restoreDrawdownOptions(pension.drawdown, `${label} drawdown`)
+						: createDrawdownOptions()
 			};
 			for (const field of dcNumbers)
 				restored[field] =
@@ -391,7 +463,11 @@ export function fromDocument(document) {
 				kind: pension.kind,
 				name: pension.name,
 				contributionFrequency: pension.contributionFrequency,
-				returnMode: pension.returnMode
+				returnMode: pension.returnMode,
+				drawdown:
+					version >= 14
+						? restoreDrawdownOptions(pension.drawdown, `${label} drawdown`)
+						: createDrawdownOptions()
 			};
 			for (const field of savingsNumbers)
 				restored[field] = documentNumber(pension[field], `${label} ${field}`) ?? "";
@@ -432,12 +508,18 @@ export function fromDocument(document) {
 				currentEquity: documentNumber(pension.amount, `${label} amount`) ?? ""
 			};
 		}
-		return {
+		const restored = {
 			id: pension.id,
 			kind: pension.kind,
 			name: pension.name,
 			amount: documentNumber(pension.amount, `${label} amount`) ?? ""
 		};
+		if (pension.kind === "pot") {
+			restored.drawdown = isLegacyPot
+				? restoreDrawdownOptions(pension.drawdown, `${label} drawdown`)
+				: createDrawdownOptions();
+		}
+		return restored;
 	});
 
 	const stateIndex = pensions.findIndex((pension) => pension.kind === "statePension");
@@ -473,6 +555,15 @@ export function toDocument(draft) {
 		formatVersion: FORMAT_VERSION,
 		currentAge: formNumber(draft.currentAge, "Current age"),
 		pensions: draft.pensions.map((pension) => {
+			if (pension.kind === "pot") {
+				return {
+					id: pension.id,
+					kind: pension.kind,
+					name: pension.name,
+					amount: formNumber(pension.amount, "Pension amount"),
+					drawdown: drawdownOptionsDocument(pension.drawdown)
+				};
+			}
 			if (pension.kind === "propertyEquity") {
 				const entry = { id: pension.id, kind: pension.kind, name: pension.name };
 				for (const field of propertyEquityNumbers) entry[field] = formNumber(pension[field], field);
@@ -484,7 +575,8 @@ export function toDocument(draft) {
 					kind: pension.kind,
 					name: pension.name,
 					contributionFrequency: pension.contributionFrequency,
-					returnMode: pension.returnMode
+					returnMode: pension.returnMode,
+					drawdown: drawdownOptionsDocument(pension.drawdown)
 				};
 				for (const field of savingsNumbers) entry[field] = formNumber(pension[field], field);
 				return entry;
@@ -509,7 +601,8 @@ export function toDocument(draft) {
 					kind: pension.kind,
 					name: pension.name,
 					pastPotMethod: pension.pastPotMethod,
-					returnMode: pension.returnMode
+					returnMode: pension.returnMode,
+					drawdown: drawdownOptionsDocument(pension.drawdown)
 				};
 				for (const field of dcNumbers) entry[field] = formNumber(pension[field], field);
 				entry.earnings = pension.earnings.map((row) => ({

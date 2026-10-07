@@ -1,6 +1,6 @@
 <script>
 	import { getContext } from "svelte";
-	import { Button, Input, Label } from "flowbite-svelte";
+	import { Button, Input, Label, Select } from "flowbite-svelte";
 	import { resolve } from "$app/paths";
 	import { definedBenefitResult } from "$lib/defined-benefit.js";
 	import { definedContributionResult } from "$lib/defined-contribution.js";
@@ -8,10 +8,21 @@
 	import { propertyEquityResult } from "$lib/property-equity.js";
 	import { projectedStatePensionAnnual } from "$lib/state-pension.js";
 	import { DEFAULT_INFLATION_RATE, realTermsValue } from "$lib/real-terms.js";
+	import { drawdownResult, drawdownStartingBalance } from "$lib/drawdown.js";
 
 	const draft = getContext("pension-draft");
 	const currentYear = new Date().getFullYear();
 	const poundsAndPence = new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" });
+	const withdrawalMethods = [
+		{ name: "Fixed annual amount", value: "amount" },
+		{ name: "Percentage of remaining pot", value: "percentage" }
+	];
+	const drawdownReturnModes = [
+		{ name: "Cautious (3%)", value: "cautious" },
+		{ name: "Balanced (6%)", value: "balanced" },
+		{ name: "Optimistic (9%)", value: "optimistic" },
+		{ name: "Custom", value: "custom" }
+	];
 	let showRealTerms = $state(false);
 
 	function amountInSelectedTerms(item) {
@@ -28,6 +39,44 @@
 		return poundsAndPence.format(
 			items.reduce((total, item) => total + amountInSelectedTerms(item), 0)
 		);
+	}
+
+	function drawdownFor(item) {
+		const options = item.pension.drawdown;
+		if (options.startAge === "") {
+			return {
+				message:
+					"Enter a start age and withdrawal amount or percentage to see when this pot runs dry."
+			};
+		}
+		try {
+			const startAge = Number(options.startAge);
+			let startingBalance;
+			if (item.pension.kind === "definedContribution") {
+				startingBalance = definedContributionResult(
+					item.pension,
+					draft.currentAge,
+					startAge,
+					currentYear
+				).projectedPot;
+			} else if (item.pension.kind === "personalSavings") {
+				startingBalance = personalSavingsResult(
+					item.pension,
+					draft.currentAge,
+					startAge
+				).projectedBalance;
+			} else {
+				startingBalance = drawdownStartingBalance(
+					item.pension.amount,
+					draft.currentAge,
+					startAge,
+					options
+				);
+			}
+			return { result: drawdownResult(startingBalance, options, draft.currentAge, draft.finalAge) };
+		} catch (error) {
+			return { message: error.message };
+		}
 	}
 
 	function retirementResources() {
@@ -68,6 +117,7 @@
 					);
 					resources.pots.push({
 						id: pension.id,
+						pension,
 						name: sourceName(pension, "Defined contribution pension"),
 						amount: result.projectedPot,
 						valuationAge: Number(draft.retirementAge),
@@ -80,6 +130,7 @@
 					const result = personalSavingsResult(pension, draft.currentAge, draft.retirementAge);
 					resources.pots.push({
 						id: pension.id,
+						pension,
 						name: sourceName(pension, "Personal savings"),
 						amount: result.projectedBalance,
 						valuationAge: Number(draft.retirementAge),
@@ -100,6 +151,7 @@
 				} else if (pension.kind === "pot" && pension.amount !== "") {
 					resources.pots.push({
 						id: pension.id,
+						pension,
 						name: sourceName(pension, "Previous pension pot"),
 						amount: Number(pension.amount),
 						valuationAge: Number(draft.retirementAge),
@@ -216,10 +268,97 @@
 					{#if resources.pots.length}
 						<ul class="pension-resource-list">
 							{#each resources.pots as item (item.id)}
-								<li>
-									<span>{item.name}<small>{item.detail}</small></span><strong
-										>{formatAmount(item)}</strong
-									>
+								{@const drawdown = drawdownFor(item)}
+								<li class="pension-resource-pot-item">
+									<div class="pension-resource-pot-header">
+										<span>{item.name}<small>{item.detail}</small></span><strong
+											>{formatAmount(item)}</strong
+										>
+									</div>
+									<div class="pension-drawdown">
+										<h5>Quick drawdown</h5>
+										<div class="pension-fields pension-drawdown-fields">
+											<div>
+												<Label for={`drawdown-age-${item.id}`}>Start drawing at age</Label>
+												<Input
+													id={`drawdown-age-${item.id}`}
+													type="number"
+													min={draft.currentAge}
+													max="120"
+													step="1"
+													bind:value={item.pension.drawdown.startAge}
+												/>
+											</div>
+											<div>
+												<Label for={`drawdown-method-${item.id}`}>Withdrawal method</Label>
+												<Select
+													id={`drawdown-method-${item.id}`}
+													items={withdrawalMethods}
+													bind:value={item.pension.drawdown.withdrawalMethod}
+												/>
+											</div>
+											{#if item.pension.drawdown.withdrawalMethod === "amount"}
+												<div>
+													<Label for={`drawdown-amount-${item.id}`}>Annual withdrawal (£)</Label>
+													<Input
+														id={`drawdown-amount-${item.id}`}
+														type="number"
+														min="0"
+														step="1"
+														bind:value={item.pension.drawdown.annualAmount}
+													/>
+												</div>
+											{:else}
+												<div>
+													<Label for={`drawdown-rate-${item.id}`}>Annual withdrawal (%)</Label>
+													<Input
+														id={`drawdown-rate-${item.id}`}
+														type="number"
+														min="0"
+														max="100"
+														step="0.1"
+														bind:value={item.pension.drawdown.withdrawalRate}
+													/>
+												</div>
+											{/if}
+											<div>
+												<Label for={`drawdown-return-${item.id}`}>Expected annual return</Label>
+												<Select
+													id={`drawdown-return-${item.id}`}
+													items={drawdownReturnModes}
+													bind:value={item.pension.drawdown.returnMode}
+												/>
+											</div>
+											{#if item.pension.drawdown.returnMode === "custom"}
+												<div>
+													<Label for={`drawdown-custom-${item.id}`}>Custom annual return (%)</Label>
+													<Input
+														id={`drawdown-custom-${item.id}`}
+														type="number"
+														min="-100"
+														max="100"
+														step="0.1"
+														bind:value={item.pension.drawdown.customReturnRate}
+													/>
+												</div>
+											{/if}
+										</div>
+										<p class="pension-drawdown-note">
+											Withdrawals are taken annually at each age; returns apply to the remaining
+											balance between withdrawals. The estimate runs through your plan age.
+										</p>
+										{#if drawdown.result}
+											<p class="pension-drawdown-result" aria-live="polite">
+												{#if drawdown.result.dryAge !== null}
+													Pot runs dry at age {drawdown.result.dryAge}.
+												{:else}
+													Pot lasts through age {draft.finalAge}.
+												{/if}
+											</p>
+										{:else}
+											<p class="pension-drawdown-result" aria-live="polite">{drawdown.message}</p>
+										{/if}
+									</div>
 								</li>
 							{/each}
 						</ul>

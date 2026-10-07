@@ -5,6 +5,7 @@ import {
 	createDefaultDraft,
 	createDefinedBenefit,
 	createDefinedContribution,
+	createDrawdownOptions,
 	createPropertyEquity,
 	createPersonalSavings,
 	createStatePension,
@@ -17,6 +18,46 @@ import { projectedStatePensionAnnual, statePensionAnnual } from "./state-pension
 import { personalSavingsResult } from "./personal-savings.js";
 import { propertyEquityResult } from "./property-equity.js";
 import { DEFAULT_INFLATION_RATE, realTermsValue } from "./real-terms.js";
+import { drawdownResult, drawdownStartingBalance } from "./drawdown.js";
+
+test("fixed and percentage drawdown report whether and when a pot runs dry", () => {
+	const fixed = {
+		startAge: 67,
+		withdrawalMethod: "amount",
+		annualAmount: 25000,
+		returnMode: "custom",
+		customReturnRate: 0
+	};
+	assert.deepEqual(drawdownResult(100000, fixed, 40, 95), {
+		startingBalance: 100000,
+		totalWithdrawals: 100000,
+		endingBalance: 0,
+		dryAge: 70
+	});
+	const percentage = {
+		...fixed,
+		withdrawalMethod: "percentage",
+		withdrawalRate: 50
+	};
+	assert.deepEqual(drawdownResult(100000, percentage, 40, 69), {
+		startingBalance: 100000,
+		totalWithdrawals: 87500,
+		endingBalance: 12500,
+		dryAge: null
+	});
+	percentage.withdrawalRate = 100;
+	assert.equal(drawdownResult(100000, percentage, 40, 95).dryAge, 67);
+	assert.throws(
+		() => drawdownResult(100000, { ...fixed, annualAmount: "" }, 40, 95),
+		/annual withdrawal amount/
+	);
+});
+
+test("drawdown starting balance grows from current age at its selected return", () => {
+	const options = { returnMode: "cautious", customReturnRate: "" };
+	assert.ok(Math.abs(drawdownStartingBalance(10000, 40, 45, options) - 10000 * 1.03 ** 5) < 0.001);
+	assert.throws(() => drawdownStartingBalance(10000, 40, 39, options), /drawdown start age/);
+});
 
 test("real-terms values discount future amounts by 2.5% annual inflation", () => {
 	assert.equal(DEFAULT_INFLATION_RATE, 2.5);
@@ -29,7 +70,7 @@ test("real-terms values discount future amounts by 2.5% annual inflation", () =>
 test("default draft round-trips without turning blank fields into zero", () => {
 	const initial = createDefaultDraft();
 	const document = JSON.parse(JSON.stringify(toDocument(initial)));
-	assert.equal(document.formatVersion, 13);
+	assert.equal(document.formatVersion, 14);
 	assert.equal(document.currentAge, 40);
 	assert.deepEqual(document.pensions[0], {
 		id: 1,
@@ -125,7 +166,10 @@ test("current age round-trips and older files restore with the default age", () 
 	assert.equal(document.pensions[1].amount, null);
 	const { currentAge, ...oldDocument } = document;
 	oldDocument.formatVersion = 1;
-	oldDocument.pensions = document.pensions.slice(1);
+	oldDocument.pensions = document.pensions.slice(1).map((pension) => {
+		const { drawdown, ...legacyPension } = pension;
+		return legacyPension;
+	});
 	assert.equal(fromDocument(oldDocument).currentAge, 40);
 	assert.deepEqual(
 		fromDocument(oldDocument).pensions.map((pension) => pension.kind),
@@ -144,7 +188,7 @@ test("filled and partial fields, source IDs and hidden strategy values survive",
 	const draft = createDefaultDraft();
 	draft.pensions = [
 		createStatePension(1),
-		{ id: 3, kind: "pot", name: "Workplace", amount: 0 },
+		{ id: 3, kind: "pot", name: "Workplace", amount: 0, drawdown: createDrawdownOptions() },
 		{ id: 8, kind: "income", name: "State pension", amount: "12000" }
 	];
 	draft.annualIncome = 0;
@@ -178,7 +222,7 @@ test("invalid documents are rejected without changing the current draft", () => 
 	draft.pensions.push({ id: 2, kind: "pot", name: "", amount: "" });
 	const valid = toDocument(draft);
 	const invalid = [
-		{ ...valid, formatVersion: 14 },
+		{ ...valid, formatVersion: 15 },
 		{ ...valid, currentAge: 17 },
 		{ ...valid, currentAge: 42.5 },
 		{
@@ -519,7 +563,7 @@ test("version-seven contribution years are kept without guessing ages", () => {
 	Object.assign(dc, { startYear: 2024, endYear: 2030, existingPot: 10000 });
 	draft.pensions.push(dc);
 	const file = toDocument(draft);
-	const { startAge, endAge, annualFeeRate, ...oldDc } = file.pensions[1];
+	const { startAge, endAge, annualFeeRate, drawdown, ...oldDc } = file.pensions[1];
 	const restored = fromDocument({ ...file, formatVersion: 7, pensions: [oldDc] }).pensions[1];
 	assert.equal(restored.annualFeeRate, 0.3);
 	assert.equal(restored.startAge, "");
@@ -542,6 +586,56 @@ test("version-seven contribution years are kept without guessing ages", () => {
 	}).pensions[1];
 	assert.equal(versionEight.annualFeeRate, 0.3);
 	assert.equal(versionEight.startAge, 38);
+});
+
+test("per-pot drawdown settings round-trip and older pot drafts get cautious defaults", () => {
+	const draft = createDefaultDraft();
+	const dc = createDefinedContribution(2);
+	Object.assign(dc.drawdown, {
+		startAge: 68,
+		withdrawalMethod: "percentage",
+		withdrawalRate: 4,
+		returnMode: "balanced"
+	});
+	const savings = createPersonalSavings(3);
+	Object.assign(savings.drawdown, {
+		startAge: 65,
+		annualAmount: 12000,
+		returnMode: "custom",
+		customReturnRate: 5
+	});
+	const legacyPot = {
+		id: 4,
+		kind: "pot",
+		name: "Old workplace pot",
+		amount: 50000,
+		drawdown: createDrawdownOptions()
+	};
+	draft.pensions.push(dc, savings, legacyPot);
+	const document = JSON.parse(JSON.stringify(toDocument(draft)));
+	assert.deepEqual(
+		fromDocument(document)
+			.pensions.slice(1)
+			.map((pension) => pension.drawdown),
+		[dc.drawdown, savings.drawdown, legacyPot.drawdown]
+	);
+
+	const versionThirteen = structuredClone(document);
+	versionThirteen.formatVersion = 13;
+	for (const pension of versionThirteen.pensions) {
+		if (["definedContribution", "personalSavings", "pot"].includes(pension.kind)) {
+			delete pension.drawdown;
+		}
+	}
+	const migrated = fromDocument(versionThirteen);
+	assert.deepEqual(
+		migrated.pensions.slice(1).map((pension) => pension.drawdown),
+		[createDrawdownOptions(), createDrawdownOptions(), createDrawdownOptions()]
+	);
+
+	const malformed = structuredClone(document);
+	malformed.pensions[1].drawdown.withdrawalMethod = "yearlySchedule";
+	assert.throws(() => fromDocument(malformed), /withdrawal method/);
 });
 
 test("DC return presets and custom percentage compound annually", () => {
