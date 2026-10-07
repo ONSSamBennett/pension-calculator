@@ -5,13 +5,13 @@
 	import { createDefinedBenefit, createDefinedContribution } from "$lib/pension-draft.js";
 	import { definedBenefitResult } from "$lib/defined-benefit.js";
 	import { definedContributionResult } from "$lib/defined-contribution.js";
+	import { projectedStatePensionAnnual, statePensionAnnual } from "$lib/state-pension.js";
 
 	const draft = getContext("pension-draft");
 	const kinds = [
 		{ name: "Defined benefit", value: "definedBenefit" },
 		{ name: "Defined contribution", value: "definedContribution" },
 		{ name: "Personal savings", value: "personalSavings" },
-		{ name: "State pension", value: "statePension" },
 		{ name: "Property equity", value: "propertyEquity" }
 	];
 	const legacyKinds = [
@@ -20,14 +20,12 @@
 	];
 	const amounts = {
 		personalSavings: "Current savings balance (£)",
-		statePension: "Projected annual state pension (£)",
 		propertyEquity: "Estimated available property equity (£)",
 		pot: "Current pot value (£)",
 		income: "Annual income (£)"
 	};
 	const names = {
 		personalSavings: "Account name",
-		statePension: "Name",
 		propertyEquity: "Property name",
 		pot: "Name",
 		income: "Name"
@@ -58,6 +56,7 @@
 		currency: "GBP",
 		maximumFractionDigits: 0
 	});
+	const poundsAndPence = new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" });
 
 	function addPension() {
 		draft.pensions.push({ id: draft.nextId++, kind: "unselected", name: "", amount: "" });
@@ -99,6 +98,17 @@
 					draft.retirementAge,
 					currentYear
 				)
+			};
+		} catch (error) {
+			return { error: error.message };
+		}
+	}
+
+	function stateResultFor(pension) {
+		try {
+			return {
+				amount: statePensionAnnual(pension),
+				projected: projectedStatePensionAnnual(pension, draft.currentAge)
 			};
 		} catch (error) {
 			return { error: error.message };
@@ -167,7 +177,9 @@
 		{#each draft.pensions as pension (pension.id)}
 			<div class="pension-entry">
 				<div class="pension-entry-heading">
-					{#if pension.kind === "definedBenefit" || pension.kind === "definedContribution"}
+					{#if pension.kind === "statePension"}
+						<h3>State Pension</h3>
+					{:else if pension.kind === "definedBenefit" || pension.kind === "definedContribution"}
 						<h3 class="pension-entry-name">
 							<label for={`name-${pension.id}`}
 								>{pension.kind === "definedBenefit" ? "Scheme name" : "Pension name"}</label
@@ -186,31 +198,91 @@
 								: ""}
 						</h3>
 					{/if}
-					<Button
-						color="light"
-						size="sm"
-						onclick={() =>
-							(draft.pensions = draft.pensions.filter((entry) => entry.id !== pension.id))}
-						>Remove</Button
-					>
+					{#if pension.kind !== "statePension" || draft.pensions[0].id !== pension.id}<Button
+							color="light"
+							size="sm"
+							onclick={() =>
+								(draft.pensions = draft.pensions.filter((entry) => entry.id !== pension.id))}
+							>Remove</Button
+						>{/if}
 				</div>
-				<div class="pension-type-field">
-					<Label for={`kind-${pension.id}`}>Pension type</Label>
-					<Select
-						id={`kind-${pension.id}`}
-						placeholder=""
-						items={[
-							...(pension.kind === "unselected"
-								? [{ name: "Choose a pension type", value: "unselected", disabled: true }]
-								: []),
-							...kinds,
-							...(["pot", "income"].includes(pension.kind) ? legacyKinds : [])
-						]}
-						value={pension.kind}
-						onchange={(event) => selectKind(pension, event)}
-					/>
-				</div>
-				{#if pension.kind === "definedBenefit"}
+				{#if pension.kind !== "statePension" || draft.pensions[0].id !== pension.id}
+					<div class="pension-type-field">
+						<Label for={`kind-${pension.id}`}>Pension type</Label>
+						<Select
+							id={`kind-${pension.id}`}
+							placeholder=""
+							items={[
+								...(pension.kind === "unselected"
+									? [{ name: "Choose a pension type", value: "unselected", disabled: true }]
+									: []),
+								...kinds,
+								...(pension.kind === "statePension"
+									? [{ name: "State pension (previous entry)", value: "statePension" }]
+									: []),
+								...(["pot", "income"].includes(pension.kind) ? legacyKinds : [])
+							]}
+							value={pension.kind}
+							onchange={(event) => selectKind(pension, event)}
+						/>
+					</div>
+				{/if}
+				{#if pension.kind === "statePension"}
+					<div class="pension-fields">
+						<div>
+							<Label for={`state-years-${pension.id}`}
+								>Expected National Insurance qualifying years on retirement</Label
+							>
+							<Input
+								id={`state-years-${pension.id}`}
+								type="number"
+								min="0"
+								max="120"
+								step="1"
+								bind:value={pension.qualifyingYears}
+							/>
+						</div>
+						<div>
+							<Label for={`state-age-${pension.id}`}>Estimated qualifying age</Label>
+							<Input
+								id={`state-age-${pension.id}`}
+								type="number"
+								min="18"
+								max="120"
+								step="1"
+								bind:value={pension.qualifyingAge}
+							/>
+						</div>
+						<div>
+							<Label for={`state-increase-${pension.id}`}
+								>Expected annual State Pension increase (%)</Label
+							>
+							<Input
+								id={`state-increase-${pension.id}`}
+								type="number"
+								min="0"
+								max="100"
+								step="0.1"
+								bind:value={pension.annualIncreaseRate}
+							/>
+						</div>
+					</div>
+					{@const state = stateResultFor(pension)}
+					<div class="pension-result" aria-live="polite">
+						{#if state.projected !== undefined}<strong
+								>Estimated yearly State Pension {Number(pension.qualifyingAge) >
+								Number(draft.currentAge)
+									? `at age ${pension.qualifyingAge}`
+									: "now"}: {poundsAndPence.format(state.projected)}</strong
+							>
+							<p>At today's illustrative rate: {poundsAndPence.format(state.amount)}</p>
+						{:else}<p>{state.error}</p>{/if}
+					</div>
+					{#if pension.legacyAmount !== ""}<p class="pension-note">
+							Previously saved annual figure: {poundsAndPence.format(Number(pension.legacyAmount))}.
+							The estimate above uses qualifying years instead.
+						</p>{/if}
+				{:else if pension.kind === "definedBenefit"}
 					<div class="pension-fields">
 						<div>
 							<Label for={`service-start-${pension.id}`}

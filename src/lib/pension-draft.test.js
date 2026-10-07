@@ -5,45 +5,132 @@ import {
 	createDefaultDraft,
 	createDefinedBenefit,
 	createDefinedContribution,
+	createStatePension,
 	fromDocument,
 	toDocument
 } from "./pension-draft.js";
 import { definedBenefitResult } from "./defined-benefit.js";
 import { definedContributionResult } from "./defined-contribution.js";
+import { projectedStatePensionAnnual, statePensionAnnual } from "./state-pension.js";
 
 test("default draft round-trips without turning blank fields into zero", () => {
 	const initial = createDefaultDraft();
 	const document = JSON.parse(JSON.stringify(toDocument(initial)));
-	assert.equal(document.formatVersion, 9);
+	assert.equal(document.formatVersion, 11);
 	assert.equal(document.currentAge, 40);
-	assert.deepEqual(document.pensions, []);
+	assert.deepEqual(document.pensions[0], {
+		id: 1,
+		kind: "statePension",
+		name: "State Pension",
+		qualifyingYears: 35,
+		qualifyingAge: 67,
+		annualIncreaseRate: 3.2,
+		legacyAmount: null
+	});
 	assert.equal(document.withdrawals.annualIncome, null);
 	assert.ok(!("nextId" in document));
 	assert.deepEqual(fromDocument(document), initial);
 });
 
+test("State Pension uses qualifying years and caps at 35 years", () => {
+	const pension = createStatePension(1);
+	assert.equal(statePensionAnnual(pension), 12547.6);
+	pension.qualifyingYears = 17;
+	assert.ok(Math.abs(statePensionAnnual(pension) - (241.3 / 35) * 17 * 52) < 0.001);
+	pension.qualifyingYears = 0;
+	assert.equal(statePensionAnnual(pension), 0);
+	pension.qualifyingYears = 45;
+	assert.equal(statePensionAnnual(pension), 12547.6);
+	pension.qualifyingYears = "";
+	assert.throws(() => statePensionAnnual(pension), /qualifying years/);
+	pension.qualifyingYears = 35;
+	pension.qualifyingAge = 0;
+	assert.throws(() => statePensionAnnual(pension), /qualifying age/);
+});
+
+test("State Pension increase compounds to qualifying age and preserves edits", () => {
+	const pension = createStatePension(1);
+	assert.ok(Math.abs(projectedStatePensionAnnual(pension, 40) - 12547.6 * 1.032 ** 27) < 0.01);
+	pension.annualIncreaseRate = 0;
+	assert.equal(projectedStatePensionAnnual(pension, 40), 12547.6);
+	pension.annualIncreaseRate = 3.2;
+	pension.qualifyingAge = 40;
+	assert.equal(projectedStatePensionAnnual(pension, 40), 12547.6);
+	pension.qualifyingAge = 67;
+	pension.annualIncreaseRate = -1;
+	assert.throws(() => projectedStatePensionAnnual(pension, 40), /annual State Pension increase/);
+	assert.throws(
+		() => projectedStatePensionAnnual({ ...pension, annualIncreaseRate: 3.2 }, ""),
+		/current age/
+	);
+	const draft = createDefaultDraft();
+	draft.pensions[0].annualIncreaseRate = 4;
+	assert.equal(
+		fromDocument(JSON.parse(JSON.stringify(toDocument(draft)))).pensions[0].annualIncreaseRate,
+		4
+	);
+});
+
+test("version-ten State Pension imports keep NI inputs and gain the default increase", () => {
+	const document = toDocument(createDefaultDraft());
+	const { annualIncreaseRate, ...oldState } = document.pensions[0];
+	oldState.qualifyingYears = 20;
+	const restored = fromDocument({ ...document, formatVersion: 10, pensions: [oldState] });
+	assert.equal(restored.pensions[0].qualifyingYears, 20);
+	assert.equal(restored.pensions[0].annualIncreaseRate, 3.2);
+});
+
+test("legacy State Pension moves first without losing its saved annual amount", () => {
+	const draft = createDefaultDraft();
+	const file = toDocument(draft);
+	const oldFile = {
+		...file,
+		formatVersion: 9,
+		pensions: [
+			{ id: 4, kind: "pot", name: "Other pension", amount: 5000 },
+			{ id: 9, kind: "statePension", name: "My State Pension", amount: 12000 }
+		]
+	};
+	const restored = fromDocument(oldFile);
+	assert.deepEqual(restored.pensions[0], {
+		...createStatePension(9),
+		name: "My State Pension",
+		legacyAmount: 12000
+	});
+	assert.equal(restored.pensions[1].id, 4);
+	assert.equal(restored.nextId, 10);
+	assert.equal(toDocument(restored).pensions[0].legacyAmount, 12000);
+});
+
 test("current age round-trips and older files restore with the default age", () => {
 	const draft = createDefaultDraft();
 	draft.currentAge = 53;
-	draft.pensions.push({ id: 1, kind: "pot", name: "Unclassified pot", amount: "" });
-	draft.pensions.push({ id: 2, kind: "income", name: "Unclassified income", amount: 10000 });
+	draft.pensions.push({ id: 2, kind: "pot", name: "Unclassified pot", amount: "" });
+	draft.pensions.push({ id: 3, kind: "income", name: "Unclassified income", amount: 10000 });
 	const document = toDocument(draft);
 	assert.equal(fromDocument(document).currentAge, 53);
-	assert.equal(document.pensions[0].amount, null);
+	assert.equal(document.pensions[1].amount, null);
 	const { currentAge, ...oldDocument } = document;
 	oldDocument.formatVersion = 1;
+	oldDocument.pensions = document.pensions.slice(1);
 	assert.equal(fromDocument(oldDocument).currentAge, 40);
 	assert.deepEqual(
 		fromDocument(oldDocument).pensions.map((pension) => pension.kind),
-		["pot", "income"]
+		["statePension", "pot", "income"]
 	);
 	assert.throws(() => fromDocument({ ...oldDocument, currentAge: null }));
-	assert.deepEqual(fromDocument({ ...document, formatVersion: 2 }).pensions, draft.pensions);
+	assert.deepEqual(
+		fromDocument({ ...document, formatVersion: 2, pensions: oldDocument.pensions })
+			.pensions.slice(1)
+			.map((pension) => pension.kind),
+		["pot", "income"]
+	);
 });
 
 test("filled and partial fields, source IDs and hidden strategy values survive", () => {
 	const draft = createDefaultDraft();
 	draft.pensions = [
+		createStatePension(1),
 		{ id: 3, kind: "pot", name: "Workplace", amount: 0 },
 		{ id: 8, kind: "income", name: "State pension", amount: "12000" }
 	];
@@ -53,7 +140,7 @@ test("filled and partial fields, source IDs and hidden strategy values survive",
 	draft.withdrawalRate = 4.5;
 	const document = JSON.parse(JSON.stringify(toDocument(draft)));
 	assert.deepEqual(
-		document.pensions.map((pension) => pension.amount),
+		document.pensions.slice(1).map((pension) => pension.amount),
 		[0, 12000]
 	);
 	assert.equal(document.withdrawals.annualIncome, 0);
@@ -62,22 +149,23 @@ test("filled and partial fields, source IDs and hidden strategy values survive",
 	assert.deepEqual(fromDocument(document), {
 		...draft,
 		nextId: 9,
-		pensions: [draft.pensions[0], { ...draft.pensions[1], amount: 12000 }]
+		pensions: [draft.pensions[0], draft.pensions[1], { ...draft.pensions[2], amount: 12000 }]
 	});
 });
 
-test("restoring an empty list keeps the next new source ID valid", () => {
+test("restoring an empty list adds the standard state pension", () => {
 	const document = toDocument(createDefaultDraft());
 	document.pensions = [];
-	assert.equal(fromDocument(document).nextId, 1);
+	assert.deepEqual(fromDocument(document).pensions, [createStatePension(1)]);
+	assert.equal(fromDocument(document).nextId, 2);
 });
 
 test("invalid documents are rejected without changing the current draft", () => {
 	const draft = createDefaultDraft();
-	draft.pensions.push({ id: 1, kind: "pot", name: "", amount: "" });
+	draft.pensions.push({ id: 2, kind: "pot", name: "", amount: "" });
 	const valid = toDocument(draft);
 	const invalid = [
-		{ ...valid, formatVersion: 10 },
+		{ ...valid, formatVersion: 12 },
 		{ ...valid, currentAge: 17 },
 		{ ...valid, currentAge: 42.5 },
 		{
@@ -95,7 +183,10 @@ test("invalid documents are rejected without changing the current draft", () => 
 	];
 	for (const document of invalid) {
 		assert.throws(() => applyDocument(draft, document));
-		assert.deepEqual(draft.pensions, [{ id: 1, kind: "pot", name: "", amount: "" }]);
+		assert.deepEqual(draft.pensions, [
+			createStatePension(1),
+			{ id: 2, kind: "pot", name: "", amount: "" }
+		]);
 	}
 	assert.throws(() => toDocument({ ...draft, annualIncome: "not a number" }));
 });
@@ -108,8 +199,9 @@ test("applying a validated document updates the existing draft reference", () =>
 	const existing = draft;
 	applyDocument(draft, document);
 	assert.equal(draft, existing);
-	assert.equal(draft.nextId, 6);
-	assert.equal(draft.pensions[0].name, "Defined benefit");
+	assert.equal(draft.nextId, 7);
+	assert.equal(draft.pensions[0].kind, "statePension");
+	assert.equal(draft.pensions[1].name, "Defined benefit");
 	assert.equal(draft.strategy, "percentage");
 });
 
@@ -133,24 +225,24 @@ test("DB status and CARE modes preserve both active and inactive fields", () => 
 	db.lumpSum = 0;
 	draft.pensions.push(db);
 	const document = JSON.parse(JSON.stringify(toDocument(draft)));
-	assert.deepEqual(document.pensions[0].earnings[1], { year: null, pay: null });
-	assert.equal(document.pensions[0].annualIncome, 12000);
-	assert.equal(document.pensions[0].accruedAnnualPension, 7000);
-	assert.equal(document.pensions[0].lumpSum, 0);
-	assert.equal(document.pensions[0].normalAge, 65);
-	assert.equal(document.pensions[0].startAge, 65);
-	assert.equal(document.pensions[0].serviceStartAge, 25);
-	assert.equal(document.pensions[0].leaveAge, 60);
-	assert.deepEqual(fromDocument(document).pensions[0], db);
+	assert.deepEqual(document.pensions[1].earnings[1], { year: null, pay: null });
+	assert.equal(document.pensions[1].annualIncome, 12000);
+	assert.equal(document.pensions[1].accruedAnnualPension, 7000);
+	assert.equal(document.pensions[1].lumpSum, 0);
+	assert.equal(document.pensions[1].normalAge, 65);
+	assert.equal(document.pensions[1].startAge, 65);
+	assert.equal(document.pensions[1].serviceStartAge, 25);
+	assert.equal(document.pensions[1].leaveAge, 60);
+	assert.deepEqual(fromDocument(document).pensions[1], db);
 	assert.equal(fromDocument(document).nextId, 5);
 	const { accruedAnnualPension, accrualMethod, serviceStartAge, leaveAge, ...oldDb } =
-		document.pensions[0];
+		document.pensions[1];
 	for (const version of [2, 3]) {
 		const imported = fromDocument({
 			...document,
 			formatVersion: version,
 			pensions: [{ ...oldDb, careMethod: accrualMethod, pastServiceYears: 5 }]
-		}).pensions[0];
+		}).pensions[1];
 		assert.deepEqual(imported, {
 			...db,
 			accruedAnnualPension: "",
@@ -162,29 +254,32 @@ test("DB status and CARE modes preserve both active and inactive fields", () => 
 		...document,
 		formatVersion: 4,
 		pensions: [{ ...oldDb, accruedAnnualPension, accrualMethod, pastServiceYears: 5 }]
-	}).pensions[0];
+	}).pensions[1];
 	assert.deepEqual(importedV4, { ...db, serviceStartAge: "", leaveAge: "" });
 	const importedV5 = fromDocument({
 		...document,
 		formatVersion: 5,
-		pensions: [{ ...document.pensions[0], pastServiceYears: 5 }]
-	}).pensions[0];
+		pensions: [{ ...document.pensions[1], pastServiceYears: 5 }]
+	}).pensions[1];
 	assert.deepEqual(importedV5, db);
-	assert.deepEqual(fromDocument({ ...document, formatVersion: 6 }).pensions[0], db);
-	assert.ok(!("pastServiceYears" in document.pensions[0]));
+	assert.deepEqual(
+		fromDocument({ ...document, formatVersion: 6, pensions: [document.pensions[1]] }).pensions[1],
+		db
+	);
+	assert.ok(!("pastServiceYears" in document.pensions[1]));
 });
 
 test("an unselected source and each new type survive JSON round trips", () => {
 	const draft = createDefaultDraft();
 	draft.pensions = [
-		{ id: 1, kind: "unselected", name: "", amount: "" },
-		{ ...createDefinedContribution(2), name: "Workplace", existingPot: 150000 },
-		{ id: 3, kind: "personalSavings", name: "ISA", amount: 25000 },
-		{ id: 4, kind: "statePension", name: "State", amount: 12000 },
+		createStatePension(1),
+		{ id: 2, kind: "unselected", name: "", amount: "" },
+		{ ...createDefinedContribution(3), name: "Workplace", existingPot: 150000 },
+		{ id: 4, kind: "personalSavings", name: "ISA", amount: 25000 },
 		{ id: 5, kind: "propertyEquity", name: "Home", amount: 100000 }
 	];
 	const document = JSON.parse(JSON.stringify(toDocument(draft)));
-	assert.equal(document.pensions[0].amount, null);
+	assert.equal(document.pensions[1].amount, null);
 	assert.deepEqual(fromDocument(document), { ...draft, nextId: 6 });
 	assert.throws(() => fromDocument({ ...document, formatVersion: 2 }));
 });
@@ -199,15 +294,15 @@ test("old defined-contribution amounts migrate to a known existing pot", () => {
 	for (const version of [3, 4, 5, 6]) {
 		legacy.formatVersion = version;
 		const restored = fromDocument(legacy);
-		assert.deepEqual(restored.pensions[0], {
+		assert.deepEqual(restored.pensions[1], {
 			...createDefinedContribution(7),
 			name: "Old scheme",
 			existingPot: 0
 		});
-		assert.equal(restored.nextId, 8);
+		assert.equal(restored.nextId, 9);
 	}
 	legacy.pensions[0].amount = null;
-	assert.equal(fromDocument(legacy).pensions[0].existingPot, "");
+	assert.equal(fromDocument(legacy).pensions[1].existingPot, "");
 });
 
 test("DC defaults, inactive custom return, and yearly pay survive JSON round trips", () => {
@@ -225,28 +320,34 @@ test("DC defaults, inactive custom return, and yearly pay survive JSON round tri
 	dc.earnings = [{ year: "", pay: "" }];
 	draft.pensions.push(dc);
 	const document = JSON.parse(JSON.stringify(toDocument(draft)));
-	assert.equal(document.pensions[0].startAge, 38);
-	assert.equal(document.pensions[0].endAge, 44);
-	assert.equal(document.pensions[0].existingPot, 0);
-	assert.equal(document.pensions[0].annualFeeRate, 0.3);
-	assert.equal(document.pensions[0].earnings[0].pay, null);
-	assert.deepEqual(fromDocument(document).pensions[0], dc);
+	assert.equal(document.pensions[1].startAge, 38);
+	assert.equal(document.pensions[1].endAge, 44);
+	assert.equal(document.pensions[1].existingPot, 0);
+	assert.equal(document.pensions[1].annualFeeRate, 0.3);
+	assert.equal(document.pensions[1].earnings[0].pay, null);
+	assert.deepEqual(fromDocument(document).pensions[1], dc);
 	assert.throws(() =>
-		fromDocument({ ...document, pensions: [{ ...document.pensions[0], returnMode: "unknown" }] })
+		fromDocument({
+			...document,
+			pensions: [document.pensions[0], { ...document.pensions[1], returnMode: "unknown" }]
+		})
 	);
 	assert.throws(() =>
-		fromDocument({ ...document, pensions: [{ ...document.pensions[0], unexpected: true }] })
+		fromDocument({
+			...document,
+			pensions: [document.pensions[0], { ...document.pensions[1], unexpected: true }]
+		})
 	);
 });
 
 test("version-seven contribution years are kept without guessing ages", () => {
 	const draft = createDefaultDraft();
-	const dc = createDefinedContribution(1);
+	const dc = createDefinedContribution(2);
 	Object.assign(dc, { startYear: 2024, endYear: 2030, existingPot: 10000 });
 	draft.pensions.push(dc);
 	const file = toDocument(draft);
-	const { startAge, endAge, annualFeeRate, ...oldDc } = file.pensions[0];
-	const restored = fromDocument({ ...file, formatVersion: 7, pensions: [oldDc] }).pensions[0];
+	const { startAge, endAge, annualFeeRate, ...oldDc } = file.pensions[1];
+	const restored = fromDocument({ ...file, formatVersion: 7, pensions: [oldDc] }).pensions[1];
 	assert.equal(restored.annualFeeRate, 0.3);
 	assert.equal(restored.startAge, "");
 	assert.equal(restored.endAge, "");
@@ -258,14 +359,14 @@ test("version-seven contribution years are kept without guessing ages", () => {
 	);
 	assert.deepEqual(
 		fromDocument(JSON.parse(JSON.stringify(toDocument({ ...draft, pensions: [restored] }))))
-			.pensions[0],
+			.pensions[1],
 		restored
 	);
 	const versionEight = fromDocument({
 		...file,
 		formatVersion: 8,
 		pensions: [{ ...oldDc, startAge: 38, endAge: 44 }]
-	}).pensions[0];
+	}).pensions[1];
 	assert.equal(versionEight.annualFeeRate, 0.3);
 	assert.equal(versionEight.startAge, 38);
 });
@@ -415,7 +516,7 @@ test("DC estimated past pot includes fees but entered current pot is not charged
 
 test("version-five files derive service from ages instead of a saved year count", () => {
 	const draft = createDefaultDraft();
-	const db = createDefinedBenefit(1);
+	const db = createDefinedBenefit(2);
 	Object.assign(db, {
 		serviceStartAge: 20,
 		leaveAge: 60,
@@ -427,9 +528,9 @@ test("version-five files derive service from ages instead of a saved year count"
 	const legacy = {
 		...current,
 		formatVersion: 5,
-		pensions: [{ ...current.pensions[0], pastServiceYears: 1 }]
+		pensions: [{ ...current.pensions[1], pastServiceYears: 1 }]
 	};
-	const restored = fromDocument(legacy).pensions[0];
+	const restored = fromDocument(legacy).pensions[1];
 	assert.ok(!("pastServiceYears" in restored));
 	assert.equal(definedBenefitResult(restored, 40, 2026).annualIncome, 40000);
 	legacy.pensions[0].pastServiceYears = "invalid";
@@ -630,7 +731,7 @@ test("an already-departed scheme earns no new service or final-salary growth", (
 
 test("switching methods retains inactive inputs without including them in known accrual", () => {
 	const draft = createDefaultDraft();
-	const db = createDefinedBenefit(1);
+	const db = createDefinedBenefit(2);
 	Object.assign(db, {
 		scheme: "care",
 		accrualMethod: "known",
@@ -646,7 +747,7 @@ test("switching methods retains inactive inputs without including them in known 
 		]
 	});
 	draft.pensions.push(db);
-	const restored = fromDocument(JSON.parse(JSON.stringify(toDocument(draft)))).pensions[0];
+	const restored = fromDocument(JSON.parse(JSON.stringify(toDocument(draft)))).pensions[1];
 	assert.deepEqual(restored, db);
 	assert.equal(definedBenefitResult(restored, 40, 2026).annualIncome, 6000);
 	restored.accrualMethod = "yearly";

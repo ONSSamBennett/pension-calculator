@@ -1,4 +1,4 @@
-export const FORMAT_VERSION = 9;
+export const FORMAT_VERSION = 11;
 
 const simpleKinds = [
 	"pot",
@@ -61,6 +61,18 @@ export function createDefinedContribution(id) {
 	};
 }
 
+export function createStatePension(id) {
+	return {
+		id,
+		kind: "statePension",
+		name: "State Pension",
+		qualifyingYears: 35,
+		qualifyingAge: 67,
+		annualIncreaseRate: 3.2,
+		legacyAmount: ""
+	};
+}
+
 export function createDefinedBenefit(id) {
 	return {
 		id,
@@ -87,8 +99,8 @@ export function createDefinedBenefit(id) {
 
 export function createDefaultDraft() {
 	return {
-		pensions: [],
-		nextId: 1,
+		pensions: [createStatePension(1)],
+		nextId: 2,
 		currentAge: 40,
 		retirementAge: 67,
 		finalAge: 95,
@@ -132,6 +144,8 @@ export function fromDocument(document) {
 		version !== 6 &&
 		version !== 7 &&
 		version !== 8 &&
+		version !== 9 &&
+		version !== 10 &&
 		version !== FORMAT_VERSION
 	) {
 		throw new Error("Unsupported pension draft format version");
@@ -158,6 +172,7 @@ export function fromDocument(document) {
 		if (pension === null || typeof pension !== "object") throw new Error(`${label} is invalid`);
 		const isDb = version >= 2 && pension.kind === "definedBenefit";
 		const isDc = version >= 7 && pension.kind === "definedContribution";
+		const isState = version >= 10 && pension.kind === "statePension";
 		assertFields(
 			pension,
 			isDb
@@ -196,13 +211,23 @@ export function fromDocument(document) {
 							...dcNumbers.filter(
 								(field) =>
 									(version >= 8 || (field !== "startAge" && field !== "endAge")) &&
-									(version === FORMAT_VERSION || field !== "annualFeeRate")
+									(version >= 9 || field !== "annualFeeRate")
 							),
 							"pastPotMethod",
 							"earnings",
 							"returnMode"
 						]
-					: ["id", "kind", "name", "amount"],
+					: isState
+						? [
+								"id",
+								"kind",
+								"name",
+								"qualifyingYears",
+								"qualifyingAge",
+								...(version === FORMAT_VERSION ? ["annualIncreaseRate"] : []),
+								"legacyAmount"
+							]
+						: ["id", "kind", "name", "amount"],
 			label
 		);
 		if (
@@ -218,6 +243,7 @@ export function fromDocument(document) {
 		if (
 			!isDb &&
 			!isDc &&
+			!isState &&
 			!(version >= 3 ? simpleKinds : ["pot", "income"]).includes(pension.kind)
 		) {
 			throw new Error(`${label} has an unknown kind`);
@@ -273,7 +299,7 @@ export function fromDocument(document) {
 				restored[field] =
 					version < 8 && (field === "startAge" || field === "endAge")
 						? ""
-						: version < FORMAT_VERSION && field === "annualFeeRate"
+						: version < 9 && field === "annualFeeRate"
 							? 0.3
 							: (documentNumber(pension[field], `${label} ${field}`) ?? "");
 			restored.earnings = pension.earnings.map((row) => {
@@ -284,6 +310,27 @@ export function fromDocument(document) {
 				};
 			});
 			return restored;
+		}
+		if (isState) {
+			return {
+				id: pension.id,
+				kind: pension.kind,
+				name: pension.name,
+				qualifyingYears: documentNumber(pension.qualifyingYears, `${label} qualifying years`) ?? "",
+				qualifyingAge: documentNumber(pension.qualifyingAge, `${label} qualifying age`) ?? "",
+				annualIncreaseRate:
+					version === FORMAT_VERSION
+						? (documentNumber(pension.annualIncreaseRate, `${label} annual increase`) ?? "")
+						: 3.2,
+				legacyAmount: documentNumber(pension.legacyAmount, `${label} previous amount`) ?? ""
+			};
+		}
+		if (pension.kind === "statePension") {
+			return {
+				...createStatePension(pension.id),
+				name: pension.name,
+				legacyAmount: documentNumber(pension.amount, `${label} amount`) ?? ""
+			};
 		}
 		if (pension.kind === "definedContribution") {
 			return {
@@ -299,6 +346,13 @@ export function fromDocument(document) {
 			amount: documentNumber(pension.amount, `${label} amount`) ?? ""
 		};
 	});
+
+	const stateIndex = pensions.findIndex((pension) => pension.kind === "statePension");
+	if (stateIndex === -1) {
+		pensions.unshift(createStatePension(++highestId));
+	} else if (stateIndex > 0) {
+		pensions.unshift(pensions.splice(stateIndex, 1)[0]);
+	}
 
 	const withdrawal = document.withdrawals;
 	assertFields(
@@ -326,6 +380,20 @@ export function toDocument(draft) {
 		formatVersion: FORMAT_VERSION,
 		currentAge: formNumber(draft.currentAge, "Current age"),
 		pensions: draft.pensions.map((pension) => {
+			if (pension.kind === "statePension") {
+				return {
+					id: pension.id,
+					kind: pension.kind,
+					name: pension.name,
+					qualifyingYears: formNumber(pension.qualifyingYears, "Qualifying years"),
+					qualifyingAge: formNumber(pension.qualifyingAge, "Qualifying age"),
+					annualIncreaseRate: formNumber(
+						pension.annualIncreaseRate,
+						"Annual State Pension increase"
+					),
+					legacyAmount: formNumber(pension.legacyAmount, "Previous state pension amount")
+				};
+			}
 			if (pension.kind === "definedContribution") {
 				const entry = {
 					id: pension.id,
