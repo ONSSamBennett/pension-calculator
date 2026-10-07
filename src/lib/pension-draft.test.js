@@ -16,6 +16,15 @@ import { definedContributionResult } from "./defined-contribution.js";
 import { projectedStatePensionAnnual, statePensionAnnual } from "./state-pension.js";
 import { personalSavingsResult } from "./personal-savings.js";
 import { propertyEquityResult } from "./property-equity.js";
+import { DEFAULT_INFLATION_RATE, realTermsValue } from "./real-terms.js";
+
+test("real-terms values discount future amounts by 2.5% annual inflation", () => {
+	assert.equal(DEFAULT_INFLATION_RATE, 2.5);
+	assert.ok(Math.abs(realTermsValue(10000, 67, 40) - 10000 / 1.025 ** 27) < 0.001);
+	assert.equal(realTermsValue(10000, 40, 40), 10000);
+	assert.equal(realTermsValue(10000, 35, 40), 10000);
+	assert.throws(() => realTermsValue("invalid", 67, 40), /real-terms calculation/);
+});
 
 test("default draft round-trips without turning blank fields into zero", () => {
 	const initial = createDefaultDraft();

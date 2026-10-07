@@ -287,6 +287,36 @@
 	margin: 0;
 }
 
+.pension-resource-display {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	margin-top: 16px;
+}
+
+.pension-price-toggle {
+	display: inline-flex;
+	gap: 2px;
+	padding: 3px;
+	border: 1px solid #87988c;
+	background: #fff;
+}
+
+.pension-price-toggle button {
+	padding: 7px 10px;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	cursor: pointer;
+}
+
+.pension-price-toggle button[aria-pressed="true"] {
+	background: var(--accent);
+	color: #fff;
+}
+
 .pension-resource-note {
 	margin: 8px 0 0;
 	font-size: 14px;
@@ -378,6 +408,11 @@
 @media (max-width: 760px) {
 	.pension-resource-groups {
 		grid-template-columns: 1fr;
+	}
+
+	.pension-resource-display {
+		align-items: flex-start;
+		flex-direction: column;
 	}
 
 	.pension-header-inner {
