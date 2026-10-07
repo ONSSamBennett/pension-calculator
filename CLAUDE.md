@@ -6,6 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A collection of SvelteKit starter page templates for ONS (Office for National Statistics) data visualisation, built on the [`@onsvisual/svelte-components`](https://github.com/ONSvisual/svelte-components/) library ([Storybook docs](https://onsvisual.github.io/svelte-components/)). Each route in `src/routes/` is a self-contained template (`article`, `feature`, `embed`, `map`). The root `+page.svelte` is an index linking to them. The intended workflow is that users copy one template's `+page.svelte` over `src/routes/+page.svelte` and delete the rest.
 
+## Pensions calculator decisions
+
+Keep this section current as the pensions calculator takes shape. For each meaningful change, record what changed and why; distinguish intended choices from work already implemented.
+
+- **2026-10-07 - UI and chart dependencies:** Added `flowbite-svelte` and `echarts` to `devDependencies` and ran `npm install`. They are available for the planned calculator UI and charts. Kept `@onsvisual/svelte-components` and `@onsvisual/svelte-charts` in place because existing templates still use them; no components or charts have been migrated yet.
+
 ## Commands
 
 ```bash
