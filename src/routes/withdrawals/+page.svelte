@@ -46,14 +46,7 @@
 			</div>
 			<div>
 				<Label for="annual-income">Target annual income (£)</Label>
-				<Input
-					id="annual-income"
-					type="number"
-					min="0"
-					step="1"
-					placeholder="0"
-					bind:value={draft.annualIncome}
-				/>
+				<Input id="annual-income" type="number" min="0" step="1" bind:value={draft.annualIncome} />
 			</div>
 			<div>
 				<Label for="strategy">Withdrawal approach</Label>

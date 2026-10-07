@@ -116,6 +116,16 @@
 	gap: 16px;
 }
 
+.pension-age-field {
+	max-width: 220px;
+	margin-bottom: 36px;
+}
+
+.pension-age-field label {
+	display: block;
+	margin-bottom: 8px;
+}
+
 .pension-section-heading {
 	border-bottom: 1px solid #cbd9ce;
 	padding-bottom: 22px;
@@ -149,6 +159,73 @@
 	font-size: 16px;
 	font-weight: 700;
 	margin: 0;
+}
+
+.pension-type-field {
+	max-width: 340px;
+	margin-bottom: 24px;
+}
+
+.pension-type-field label {
+	display: block;
+	margin-bottom: 8px;
+}
+
+.pension-add-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.pension-extra-fields {
+	margin-top: 24px;
+}
+
+.pension-note {
+	color: var(--muted);
+	font-size: 14px;
+	line-height: 1.5;
+	margin-top: 16px;
+}
+
+.pension-error {
+	color: #a12626;
+	font-size: 14px;
+	margin-top: 6px;
+}
+
+.pension-earnings {
+	margin-top: 24px;
+}
+
+.pension-earnings h4 {
+	font-size: 16px;
+	font-weight: 700;
+	margin-bottom: 16px;
+}
+
+.pension-earnings-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+	align-items: end;
+	gap: 12px;
+	margin-bottom: 12px;
+}
+
+.pension-earnings-row label {
+	display: block;
+	margin-bottom: 8px;
+}
+
+.pension-result {
+	border-left: 3px solid var(--accent);
+	padding: 14px 18px;
+	margin-top: 24px;
+	background: #e8f2ea;
+}
+
+.pension-result p {
+	margin: 4px 0 0;
 }
 
 .pension-fields {
@@ -236,10 +313,20 @@
 
 	.pension-section-heading {
 		align-items: flex-start;
+		flex-direction: column;
 	}
 
 	.pension-fields {
 		grid-template-columns: 1fr;
 		gap: 18px;
+	}
+
+	.pension-earnings-row {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.pension-earnings-row button {
+		grid-column: 1 / -1;
+		justify-self: start;
 	}
 }
