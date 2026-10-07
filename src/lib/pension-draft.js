@@ -1,4 +1,4 @@
-export const FORMAT_VERSION = 8;
+export const FORMAT_VERSION = 9;
 
 const simpleKinds = [
 	"pot",
@@ -34,6 +34,7 @@ const dcNumbers = [
 	"payGrowthRate",
 	"employeeRate",
 	"employerRate",
+	"annualFeeRate",
 	"existingPot",
 	"customReturnRate"
 ];
@@ -51,6 +52,7 @@ export function createDefinedContribution(id) {
 		payGrowthRate: 0,
 		employeeRate: 5,
 		employerRate: 3,
+		annualFeeRate: 0.3,
 		pastPotMethod: "known",
 		existingPot: "",
 		earnings: [],
@@ -129,6 +131,7 @@ export function fromDocument(document) {
 		version !== 5 &&
 		version !== 6 &&
 		version !== 7 &&
+		version !== 8 &&
 		version !== FORMAT_VERSION
 	) {
 		throw new Error("Unsupported pension draft format version");
@@ -192,7 +195,8 @@ export function fromDocument(document) {
 							"name",
 							...dcNumbers.filter(
 								(field) =>
-									version === FORMAT_VERSION || (field !== "startAge" && field !== "endAge")
+									(version >= 8 || (field !== "startAge" && field !== "endAge")) &&
+									(version === FORMAT_VERSION || field !== "annualFeeRate")
 							),
 							"pastPotMethod",
 							"earnings",
@@ -267,9 +271,11 @@ export function fromDocument(document) {
 			};
 			for (const field of dcNumbers)
 				restored[field] =
-					version < FORMAT_VERSION && (field === "startAge" || field === "endAge")
+					version < 8 && (field === "startAge" || field === "endAge")
 						? ""
-						: (documentNumber(pension[field], `${label} ${field}`) ?? "");
+						: version < FORMAT_VERSION && field === "annualFeeRate"
+							? 0.3
+							: (documentNumber(pension[field], `${label} ${field}`) ?? "");
 			restored.earnings = pension.earnings.map((row) => {
 				assertFields(row, ["year", "pay"], `${label} earnings row`);
 				return {

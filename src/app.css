@@ -118,6 +118,10 @@
 
 .pension-age-field {
 	max-width: 220px;
+	margin-bottom: 20px;
+}
+
+.pension-age-field + .pension-age-field {
 	margin-bottom: 36px;
 }
 

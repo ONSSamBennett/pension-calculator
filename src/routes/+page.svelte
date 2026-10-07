@@ -92,7 +92,14 @@
 
 	function dcResultFor(pension) {
 		try {
-			return { result: definedContributionResult(pension, draft.currentAge, currentYear) };
+			return {
+				result: definedContributionResult(
+					pension,
+					draft.currentAge,
+					draft.retirementAge,
+					currentYear
+				)
+			};
 		} catch (error) {
 			return { error: error.message };
 		}
@@ -133,6 +140,20 @@
 			/>
 			{#if draft.currentAge === "" || !Number.isInteger(Number(draft.currentAge)) || Number(draft.currentAge) < 18 || Number(draft.currentAge) > 120}
 				<p class="pension-error">Enter your current age between 18 and 120.</p>
+			{/if}
+		</div>
+		<div class="pension-age-field">
+			<Label for="target-retirement-age">Target retirement age</Label>
+			<Input
+				id="target-retirement-age"
+				type="number"
+				min="18"
+				max="120"
+				step="1"
+				bind:value={draft.retirementAge}
+			/>
+			{#if draft.retirementAge === "" || !Number.isInteger(Number(draft.retirementAge)) || Number(draft.retirementAge) < Number(draft.currentAge) || Number(draft.retirementAge) > 120}
+				<p class="pension-error">Enter a target retirement age from your current age to 120.</p>
 			{/if}
 		</div>
 		<div class="pension-section-heading">
@@ -463,6 +484,17 @@
 								bind:value={pension.returnMode}
 							/>
 						</div>
+						<div>
+							<Label for={`dc-fee-${pension.id}`}>Annual fee (% of pot)</Label>
+							<Input
+								id={`dc-fee-${pension.id}`}
+								type="number"
+								min="0"
+								max="100"
+								step="0.01"
+								bind:value={pension.annualFeeRate}
+							/>
+						</div>
 						{#if pension.returnMode === "custom"}
 							<div>
 								<Label for={`dc-custom-${pension.id}`}>Custom annual return (%)</Label>
@@ -542,22 +574,23 @@
 						</p>
 					{/if}
 					<p class="pension-note">
-						Contributions are added at each year's end. Returns compound annually; estimates exclude
-						fees, tax and inflation and are not guaranteed.
+						Returns and fees apply annually to the invested pot before each year's contribution
+						arrives. Estimates exclude tax and inflation and are not guaranteed.
 					</p>
 					{@const projection = dcResultFor(pension)}
 					<div class="pension-result" aria-live="polite">
 						{#if projection.result}
 							<strong
-								>Projected pension pot {projection.result.valuationYear > currentYear
-									? `at end of ${projection.result.valuationYear}`
-									: "today"}: {pounds.format(projection.result.projectedPot)}</strong
+								>Projected pension pot at age {draft.retirementAge}: {pounds.format(
+									projection.result.projectedPot
+								)}</strong
 							>
-							<p>Current or estimated pot: {pounds.format(projection.result.existingPot)}</p>
+							<p>Pension pot today: {pounds.format(projection.result.existingPot)}</p>
 							<p>Future contributions: {pounds.format(projection.result.futureContributions)}</p>
 							<p>
 								Future investment growth: {pounds.format(projection.result.futureInvestmentGrowth)}
 							</p>
+							<p>Future fees: {pounds.format(-projection.result.futureFeesPaid)}</p>
 						{:else}<p>{projection.error}</p>{/if}
 					</div>
 				{:else if pension.kind !== "unselected"}
@@ -577,9 +610,14 @@
 							/>
 						</div>
 					</div>
-					{#if pension.kind === "propertyEquity"}<p class="pension-note">
-							This is not treated as available income until you choose how to release it.
-						</p>{/if}
+					{#if pension.kind === "personalSavings" || pension.kind === "propertyEquity"}
+						<p class="pension-note">
+							This current value is recorded for planning toward retirement at age {draft.retirementAge ||
+								"—"}. No future change is estimated.
+							{#if pension.kind === "propertyEquity"}
+								Property equity is not treated as income until you choose how to release it.{/if}
+						</p>
+					{/if}
 				{/if}
 			</div>
 		{:else}

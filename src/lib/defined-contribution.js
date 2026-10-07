@@ -25,10 +25,14 @@ const returnRates = { cautious: 3, balanced: 6, optimistic: 9 };
 export function definedContributionResult(
 	pension,
 	currentAge,
+	retirementAge,
 	asOfYear = new Date().getFullYear()
 ) {
 	const age = number(currentAge, "current age", 16, 120);
 	if (!Number.isInteger(age)) throw new Error("Enter a valid current age");
+	const targetAge = number(retirementAge, "target retirement age", age, 120);
+	if (!Number.isInteger(targetAge)) throw new Error("Enter a valid target retirement age");
+	const targetYear = asOfYear + targetAge - age;
 	const startAge = number(pension.startAge, "age when contributions began", 16, 120);
 	const endAge = number(pension.endAge, "age when contributions end", 16, 120);
 	if (!Number.isInteger(startAge) || !Number.isInteger(endAge)) {
@@ -48,6 +52,7 @@ export function definedContributionResult(
 		(pension.returnMode === "custom"
 			? number(pension.customReturnRate, "custom annual return", -100, 100)
 			: returnRates[pension.returnMode]) / 100;
+	const feeRate = number(pension.annualFeeRate, "annual pension fee", 0, 100) / 100;
 	const pastEnd = Math.min(end, asOfYear - 1);
 	const hasPast = start <= pastEnd;
 	let existingPot = 0;
@@ -82,7 +87,8 @@ export function definedContributionResult(
 						: salary * (1 + growth) ** (contributionYear - asOfYear);
 				const contribution = pay * contributionRate;
 				pastContributions += contribution;
-				existingPot += contribution * (1 + returnRate) ** (asOfYear - contributionYear - 1);
+				existingPot +=
+					contribution * ((1 + returnRate) * (1 - feeRate)) ** (asOfYear - contributionYear - 1);
 			}
 			investmentGrowth = existingPot - pastContributions;
 		} else {
@@ -92,22 +98,22 @@ export function definedContributionResult(
 
 	let futureContributions = 0;
 	let futureInvestmentGrowth = 0;
+	let futureFeesPaid = 0;
 	let projectedPot = existingPot;
-	if (end >= asOfYear) {
-		const salary = number(pension.pensionablePay, "current pensionable salary");
-		for (
-			let contributionYear = Math.max(start, asOfYear);
-			contributionYear <= end;
-			contributionYear++
-		) {
-			const contribution =
-				salary * (1 + growth) ** (contributionYear - asOfYear) * contributionRate;
-			const gain = projectedPot * returnRate;
-			projectedPot += gain + contribution;
-			futureContributions += contribution;
-			futureInvestmentGrowth += gain;
-			investmentGrowth += gain;
+	let salary;
+	for (let contributionYear = asOfYear; contributionYear < targetYear; contributionYear++) {
+		let contribution = 0;
+		if (contributionYear >= start && contributionYear <= end) {
+			salary ??= number(pension.pensionablePay, "current pensionable salary");
+			contribution = salary * (1 + growth) ** (contributionYear - asOfYear) * contributionRate;
 		}
+		const gain = projectedPot * returnRate;
+		const fee = (projectedPot + gain) * feeRate;
+		projectedPot += gain - fee + contribution;
+		futureContributions += contribution;
+		futureInvestmentGrowth += gain;
+		futureFeesPaid += fee;
+		investmentGrowth += gain;
 	}
 	if (!Number.isFinite(projectedPot) || !Number.isFinite(investmentGrowth)) {
 		throw new Error("These assumptions produce an invalid projection");
@@ -117,9 +123,10 @@ export function definedContributionResult(
 		pastContributions,
 		futureContributions,
 		futureInvestmentGrowth,
+		futureFeesPaid,
 		investmentGrowth,
 		projectedPot,
-		valuationYear: Math.max(asOfYear, end),
+		valuationYear: targetYear,
 		returnRate: returnRate * 100
 	};
 }

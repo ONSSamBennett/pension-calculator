@@ -14,7 +14,7 @@ import { definedContributionResult } from "./defined-contribution.js";
 test("default draft round-trips without turning blank fields into zero", () => {
 	const initial = createDefaultDraft();
 	const document = JSON.parse(JSON.stringify(toDocument(initial)));
-	assert.equal(document.formatVersion, 8);
+	assert.equal(document.formatVersion, 9);
 	assert.equal(document.currentAge, 40);
 	assert.deepEqual(document.pensions, []);
 	assert.equal(document.withdrawals.annualIncome, null);
@@ -48,6 +48,7 @@ test("filled and partial fields, source IDs and hidden strategy values survive",
 		{ id: 8, kind: "income", name: "State pension", amount: "12000" }
 	];
 	draft.annualIncome = 0;
+	draft.retirementAge = 62;
 	draft.strategy = "steady";
 	draft.withdrawalRate = 4.5;
 	const document = JSON.parse(JSON.stringify(toDocument(draft)));
@@ -56,6 +57,7 @@ test("filled and partial fields, source IDs and hidden strategy values survive",
 		[0, 12000]
 	);
 	assert.equal(document.withdrawals.annualIncome, 0);
+	assert.equal(document.withdrawals.retirementAge, 62);
 	assert.equal(document.withdrawals.withdrawalRate, 4.5);
 	assert.deepEqual(fromDocument(document), {
 		...draft,
@@ -75,7 +77,7 @@ test("invalid documents are rejected without changing the current draft", () => 
 	draft.pensions.push({ id: 1, kind: "pot", name: "", amount: "" });
 	const valid = toDocument(draft);
 	const invalid = [
-		{ ...valid, formatVersion: 9 },
+		{ ...valid, formatVersion: 10 },
 		{ ...valid, currentAge: 17 },
 		{ ...valid, currentAge: 42.5 },
 		{
@@ -213,6 +215,7 @@ test("DC defaults, inactive custom return, and yearly pay survive JSON round tri
 	const dc = createDefinedContribution(2);
 	assert.equal(dc.employeeRate, 5);
 	assert.equal(dc.employerRate, 3);
+	assert.equal(dc.annualFeeRate, 0.3);
 	assert.equal(dc.returnMode, "balanced");
 	dc.startAge = 38;
 	dc.endAge = 44;
@@ -225,6 +228,7 @@ test("DC defaults, inactive custom return, and yearly pay survive JSON round tri
 	assert.equal(document.pensions[0].startAge, 38);
 	assert.equal(document.pensions[0].endAge, 44);
 	assert.equal(document.pensions[0].existingPot, 0);
+	assert.equal(document.pensions[0].annualFeeRate, 0.3);
 	assert.equal(document.pensions[0].earnings[0].pay, null);
 	assert.deepEqual(fromDocument(document).pensions[0], dc);
 	assert.throws(() =>
@@ -241,14 +245,15 @@ test("version-seven contribution years are kept without guessing ages", () => {
 	Object.assign(dc, { startYear: 2024, endYear: 2030, existingPot: 10000 });
 	draft.pensions.push(dc);
 	const file = toDocument(draft);
-	const { startAge, endAge, ...oldDc } = file.pensions[0];
+	const { startAge, endAge, annualFeeRate, ...oldDc } = file.pensions[0];
 	const restored = fromDocument({ ...file, formatVersion: 7, pensions: [oldDc] }).pensions[0];
+	assert.equal(restored.annualFeeRate, 0.3);
 	assert.equal(restored.startAge, "");
 	assert.equal(restored.endAge, "");
 	assert.equal(restored.startYear, 2024);
 	assert.equal(restored.endYear, 2030);
 	assert.throws(
-		() => definedContributionResult(restored, 40, 2026),
+		() => definedContributionResult(restored, 40, 42, 2026),
 		/age when contributions began/
 	);
 	assert.deepEqual(
@@ -256,30 +261,39 @@ test("version-seven contribution years are kept without guessing ages", () => {
 			.pensions[0],
 		restored
 	);
+	const versionEight = fromDocument({
+		...file,
+		formatVersion: 8,
+		pensions: [{ ...oldDc, startAge: 38, endAge: 44 }]
+	}).pensions[0];
+	assert.equal(versionEight.annualFeeRate, 0.3);
+	assert.equal(versionEight.startAge, 38);
 });
 
 test("DC return presets and custom percentage compound annually", () => {
 	const dc = createDefinedContribution(1);
 	Object.assign(dc, { startAge: 40, endAge: 41, pensionablePay: 100000 });
-	assert.deepEqual(definedContributionResult(dc, 40, 2026), {
+	dc.annualFeeRate = 0;
+	assert.deepEqual(definedContributionResult(dc, 40, 42, 2026), {
 		existingPot: 0,
 		pastContributions: 0,
 		futureContributions: 16000,
 		futureInvestmentGrowth: 480,
+		futureFeesPaid: 0,
 		investmentGrowth: 480,
 		projectedPot: 16480,
-		valuationYear: 2027,
+		valuationYear: 2028,
 		returnRate: 6
 	});
 	dc.returnMode = "cautious";
-	assert.equal(definedContributionResult(dc, 40, 2026).projectedPot, 16240);
+	assert.equal(definedContributionResult(dc, 40, 42, 2026).projectedPot, 16240);
 	dc.returnMode = "optimistic";
-	assert.equal(definedContributionResult(dc, 40, 2026).projectedPot, 16720);
+	assert.equal(definedContributionResult(dc, 40, 42, 2026).projectedPot, 16720);
 	dc.returnMode = "custom";
 	dc.customReturnRate = -2;
-	assert.equal(definedContributionResult(dc, 40, 2026).projectedPot, 15840);
+	assert.equal(definedContributionResult(dc, 40, 42, 2026).projectedPot, 15840);
 	dc.customReturnRate = "";
-	assert.throws(() => definedContributionResult(dc, 40, 2026), /custom annual return/);
+	assert.throws(() => definedContributionResult(dc, 40, 42, 2026), /custom annual return/);
 });
 
 test("DC entered pot does not reapply past returns", () => {
@@ -288,10 +302,11 @@ test("DC entered pot does not reapply past returns", () => {
 		startAge: 38,
 		endAge: 41,
 		pensionablePay: 100000,
+		annualFeeRate: 0,
 		existingPot: 10000,
 		earnings: [{ year: 2024, pay: 1 }]
 	});
-	const result = definedContributionResult(dc, 40, 2026);
+	const result = definedContributionResult(dc, 40, 42, 2026);
 	assert.equal(result.existingPot, 10000);
 	assert.equal(result.pastContributions, 0);
 	assert.equal(result.futureContributions, 16000);
@@ -304,9 +319,10 @@ test("DC estimated and year-by-year past pots match with constant pay", () => {
 		startAge: 38,
 		endAge: 39,
 		pensionablePay: 100000,
+		annualFeeRate: 0,
 		pastPotMethod: "estimate"
 	});
-	const estimated = definedContributionResult(dc, 40, 2026);
+	const estimated = definedContributionResult(dc, 40, 40, 2026);
 	assert.equal(estimated.pastContributions, 16000);
 	assert.equal(estimated.projectedPot, 16480);
 	dc.pastPotMethod = "yearly";
@@ -314,9 +330,9 @@ test("DC estimated and year-by-year past pots match with constant pay", () => {
 		{ year: 2024, pay: 100000 },
 		{ year: 2025, pay: 100000 }
 	];
-	assert.deepEqual(definedContributionResult(dc, 40, 2026), estimated);
+	assert.deepEqual(definedContributionResult(dc, 40, 40, 2026), estimated);
 	dc.earnings[1].year = 2024;
-	assert.throws(() => definedContributionResult(dc, 40, 2026), /distinct/);
+	assert.throws(() => definedContributionResult(dc, 40, 40, 2026), /distinct/);
 });
 
 test("DC future-only jobs begin contributions at the chosen calendar year", () => {
@@ -325,15 +341,76 @@ test("DC future-only jobs begin contributions at the chosen calendar year", () =
 		startAge: 42,
 		endAge: 43,
 		pensionablePay: 100000,
+		annualFeeRate: 0,
 		payGrowthRate: 10,
 		existingPot: 99999,
 		pastPotMethod: "known"
 	});
-	const result = definedContributionResult(dc, 40, 2026);
+	const result = definedContributionResult(dc, 40, 44, 2026);
 	assert.equal(result.existingPot, 0);
 	assert.ok(Math.abs(result.projectedPot - 20908.8) < 0.01);
 	dc.endAge = 41;
-	assert.throws(() => definedContributionResult(dc, 40, 2026), /Last contribution age/);
+	assert.throws(() => definedContributionResult(dc, 40, 44, 2026), /Last contribution age/);
+});
+
+test("DC pot keeps earning returns after contributions stop until retirement", () => {
+	const dc = createDefinedContribution(1);
+	Object.assign(dc, { startAge: 40, endAge: 41, pensionablePay: 100000 });
+	dc.annualFeeRate = 0;
+	const result = definedContributionResult(dc, 40, 44, 2026);
+	assert.equal(result.existingPot, 0);
+	assert.equal(result.futureContributions, 16000);
+	assert.ok(Math.abs(result.projectedPot - 16480 * 1.06 ** 2) < 0.01);
+	assert.equal(result.valuationYear, 2030);
+});
+
+test("DC retirement snapshot excludes contributions in or after the retirement year", () => {
+	const dc = createDefinedContribution(1);
+	Object.assign(dc, { startAge: 40, endAge: 50, pensionablePay: 100000 });
+	dc.annualFeeRate = 0;
+	assert.equal(definedContributionResult(dc, 40, 40, 2026).projectedPot, 0);
+	const result = definedContributionResult(dc, 40, 42, 2026);
+	assert.equal(result.futureContributions, 16000);
+	assert.equal(result.projectedPot, 16480);
+	assert.throws(() => definedContributionResult(dc, 40, 39, 2026), /target retirement age/);
+});
+
+test("DC default 0.3% fee applies to invested pot before year-end contributions", () => {
+	const dc = createDefinedContribution(1);
+	Object.assign(dc, { startAge: 40, endAge: 41, pensionablePay: 100000 });
+	assert.equal(definedContributionResult(dc, 40, 41, 2026).projectedPot, 8000);
+	const result = definedContributionResult(dc, 40, 42, 2026);
+	assert.ok(Math.abs(result.projectedPot - 16454.56) < 0.01);
+	assert.equal(result.futureFeesPaid, 25.44);
+	assert.ok(
+		Math.abs(
+			result.existingPot +
+				result.futureContributions +
+				result.futureInvestmentGrowth -
+				result.futureFeesPaid -
+				result.projectedPot
+		) < 0.01
+	);
+	dc.annualFeeRate = -1;
+	assert.throws(() => definedContributionResult(dc, 40, 42, 2026), /annual pension fee/);
+	dc.annualFeeRate = "";
+	assert.throws(() => definedContributionResult(dc, 40, 42, 2026), /annual pension fee/);
+});
+
+test("DC estimated past pot includes fees but entered current pot is not charged retrospectively", () => {
+	const dc = createDefinedContribution(1);
+	Object.assign(dc, {
+		startAge: 38,
+		endAge: 39,
+		pensionablePay: 100000,
+		pastPotMethod: "estimate"
+	});
+	const estimated = definedContributionResult(dc, 40, 40, 2026);
+	assert.ok(Math.abs(estimated.existingPot - 16454.56) < 0.01);
+	dc.pastPotMethod = "known";
+	dc.existingPot = 10000;
+	assert.equal(definedContributionResult(dc, 40, 40, 2026).existingPot, 10000);
+	assert.ok(Math.abs(definedContributionResult(dc, 40, 41, 2026).projectedPot - 10568.2) < 0.01);
 });
 
 test("version-five files derive service from ages instead of a saved year count", () => {
