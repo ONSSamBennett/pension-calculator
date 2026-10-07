@@ -2,8 +2,9 @@
 	import { getContext } from "svelte";
 	import { resolve } from "$app/paths";
 	import { Button, Input, Label, Select } from "flowbite-svelte";
-	import { createDefinedBenefit } from "$lib/pension-draft.js";
+	import { createDefinedBenefit, createDefinedContribution } from "$lib/pension-draft.js";
 	import { definedBenefitResult } from "$lib/defined-benefit.js";
+	import { definedContributionResult } from "$lib/defined-contribution.js";
 
 	const draft = getContext("pension-draft");
 	const kinds = [
@@ -18,7 +19,6 @@
 		{ name: "Projected annual pension (previous entry)", value: "income" }
 	];
 	const amounts = {
-		definedContribution: "Current pension pot (£)",
 		personalSavings: "Current savings balance (£)",
 		statePension: "Projected annual state pension (£)",
 		propertyEquity: "Estimated available property equity (£)",
@@ -26,7 +26,6 @@
 		income: "Annual income (£)"
 	};
 	const names = {
-		definedContribution: "Scheme or provider",
 		personalSavings: "Account name",
 		statePension: "Name",
 		propertyEquity: "Property name",
@@ -42,6 +41,18 @@
 		{ name: "Enter pensionable pay for each year", value: "yearly" },
 		{ name: "Enter known accrued annual pension", value: "known" }
 	];
+	const pastPotMethods = [
+		{ name: "Enter current pension pot", value: "known" },
+		{ name: "Estimate from current salary", value: "estimate" },
+		{ name: "Enter pensionable salary for each year", value: "yearly" }
+	];
+	const returnModes = [
+		{ name: "Cautious (3%)", value: "cautious" },
+		{ name: "Balanced (6%)", value: "balanced" },
+		{ name: "Optimistic (9%)", value: "optimistic" },
+		{ name: "Custom", value: "custom" }
+	];
+	const currentYear = new Date().getFullYear();
 	const pounds = new Intl.NumberFormat("en-GB", {
 		style: "currency",
 		currency: "GBP",
@@ -66,12 +77,22 @@
 		draft.pensions[index] =
 			kind === "definedBenefit"
 				? { ...createDefinedBenefit(pension.id), name: pension.name }
-				: { id: pension.id, kind, name: pension.name, amount: "" };
+				: kind === "definedContribution"
+					? { ...createDefinedContribution(pension.id), name: pension.name }
+					: { id: pension.id, kind, name: pension.name, amount: "" };
 	}
 
 	function resultFor(pension) {
 		try {
 			return { result: definedBenefitResult(pension, draft.currentAge) };
+		} catch (error) {
+			return { error: error.message };
+		}
+	}
+
+	function dcResultFor(pension) {
+		try {
+			return { result: definedContributionResult(pension, draft.currentAge, currentYear) };
 		} catch (error) {
 			return { error: error.message };
 		}
@@ -125,9 +146,11 @@
 		{#each draft.pensions as pension (pension.id)}
 			<div class="pension-entry">
 				<div class="pension-entry-heading">
-					{#if pension.kind === "definedBenefit"}
+					{#if pension.kind === "definedBenefit" || pension.kind === "definedContribution"}
 						<h3 class="pension-entry-name">
-							<label for={`name-${pension.id}`}>Scheme name</label>
+							<label for={`name-${pension.id}`}
+								>{pension.kind === "definedBenefit" ? "Scheme name" : "Pension name"}</label
+							>
 							<input
 								id={`name-${pension.id}`}
 								type="text"
@@ -365,6 +388,177 @@
 						{:else}
 							<p>{calculation.error}</p>
 						{/if}
+					</div>
+				{:else if pension.kind === "definedContribution"}
+					<div class="pension-fields">
+						<div>
+							<Label for={`dc-start-${pension.id}`}>Age contributions began</Label>
+							<Input
+								id={`dc-start-${pension.id}`}
+								type="number"
+								min="16"
+								max="120"
+								step="1"
+								bind:value={pension.startAge}
+							/>
+						</div>
+						<div>
+							<Label for={`dc-end-${pension.id}`}>Age contributions ended or will end</Label>
+							<Input
+								id={`dc-end-${pension.id}`}
+								type="number"
+								min="16"
+								max="120"
+								step="1"
+								bind:value={pension.endAge}
+							/>
+						</div>
+						<div>
+							<Label for={`dc-pay-${pension.id}`}>Current pensionable salary (£)</Label>
+							<Input
+								id={`dc-pay-${pension.id}`}
+								type="number"
+								min="0"
+								step="1"
+								bind:value={pension.pensionablePay}
+							/>
+						</div>
+						<div>
+							<Label for={`dc-growth-${pension.id}`}>Annual pay growth (%)</Label>
+							<Input
+								id={`dc-growth-${pension.id}`}
+								type="number"
+								min="-99.99"
+								step="0.1"
+								bind:value={pension.payGrowthRate}
+							/>
+						</div>
+						<div>
+							<Label for={`dc-employee-${pension.id}`}>Employee contribution (%)</Label>
+							<Input
+								id={`dc-employee-${pension.id}`}
+								type="number"
+								min="0"
+								max="100"
+								step="0.1"
+								bind:value={pension.employeeRate}
+							/>
+						</div>
+						<div>
+							<Label for={`dc-employer-${pension.id}`}>Employer contribution (%)</Label>
+							<Input
+								id={`dc-employer-${pension.id}`}
+								type="number"
+								min="0"
+								max="100"
+								step="0.1"
+								bind:value={pension.employerRate}
+							/>
+						</div>
+						<div>
+							<Label for={`dc-return-${pension.id}`}>Expected annual return</Label>
+							<Select
+								id={`dc-return-${pension.id}`}
+								items={returnModes}
+								bind:value={pension.returnMode}
+							/>
+						</div>
+						{#if pension.returnMode === "custom"}
+							<div>
+								<Label for={`dc-custom-${pension.id}`}>Custom annual return (%)</Label>
+								<Input
+									id={`dc-custom-${pension.id}`}
+									type="number"
+									min="-100"
+									max="100"
+									step="0.1"
+									bind:value={pension.customReturnRate}
+								/>
+							</div>
+						{/if}
+						{#if pension.startAge !== "" && Number(pension.startAge) < Number(draft.currentAge)}
+							<div>
+								<Label for={`dc-past-${pension.id}`}>Existing pension pot</Label>
+								<Select
+									id={`dc-past-${pension.id}`}
+									items={pastPotMethods}
+									bind:value={pension.pastPotMethod}
+								/>
+							</div>
+							{#if pension.pastPotMethod === "known"}
+								<div>
+									<Label for={`dc-pot-${pension.id}`}>Current pension pot (£)</Label>
+									<Input
+										id={`dc-pot-${pension.id}`}
+										type="number"
+										min="0"
+										step="1"
+										bind:value={pension.existingPot}
+									/>
+								</div>
+							{/if}
+						{/if}
+					</div>
+					{#if pension.startAge !== "" && Number(pension.startAge) < Number(draft.currentAge) && pension.pastPotMethod === "yearly"}
+						<div class="pension-earnings">
+							<h4>Pensionable salary by completed contribution year</h4>
+							{#each pension.earnings as row, index}
+								<div class="pension-earnings-row">
+									<div>
+										<Label for={`dc-year-${pension.id}-${index}`}>Year</Label><Input
+											id={`dc-year-${pension.id}-${index}`}
+											type="number"
+											min="1900"
+											step="1"
+											bind:value={row.year}
+										/>
+									</div>
+									<div>
+										<Label for={`dc-earnings-${pension.id}-${index}`}>Pensionable salary (£)</Label
+										><Input
+											id={`dc-earnings-${pension.id}-${index}`}
+											type="number"
+											min="0"
+											step="1"
+											bind:value={row.pay}
+										/>
+									</div>
+									<Button color="light" size="sm" onclick={() => pension.earnings.splice(index, 1)}
+										>Remove year</Button
+									>
+								</div>
+							{/each}
+							<Button
+								color="light"
+								size="sm"
+								onclick={() => pension.earnings.push({ year: "", pay: "" })}>Add year</Button
+							>
+						</div>
+					{/if}
+					{#if (pension.startYear !== "" || pension.endYear !== "") && (pension.startAge === "" || pension.endAge === "")}
+						<p class="pension-note">
+							This previous draft recorded contribution years {pension.startYear} to {pension.endYear}.
+							Enter the ages to calculate a new projection.
+						</p>
+					{/if}
+					<p class="pension-note">
+						Contributions are added at each year's end. Returns compound annually; estimates exclude
+						fees, tax and inflation and are not guaranteed.
+					</p>
+					{@const projection = dcResultFor(pension)}
+					<div class="pension-result" aria-live="polite">
+						{#if projection.result}
+							<strong
+								>Projected pension pot {projection.result.valuationYear > currentYear
+									? `at end of ${projection.result.valuationYear}`
+									: "today"}: {pounds.format(projection.result.projectedPot)}</strong
+							>
+							<p>Current or estimated pot: {pounds.format(projection.result.existingPot)}</p>
+							<p>Future contributions: {pounds.format(projection.result.futureContributions)}</p>
+							<p>
+								Future investment growth: {pounds.format(projection.result.futureInvestmentGrowth)}
+							</p>
+						{:else}<p>{projection.error}</p>{/if}
 					</div>
 				{:else if pension.kind !== "unselected"}
 					<div class="pension-fields">

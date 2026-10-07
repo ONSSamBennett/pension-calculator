@@ -1,4 +1,4 @@
-export const FORMAT_VERSION = 6;
+export const FORMAT_VERSION = 8;
 
 const simpleKinds = [
 	"pot",
@@ -24,6 +24,40 @@ const dbNumbers = [
 	"lumpSum",
 	"revaluationRate"
 ];
+
+const dcNumbers = [
+	"startAge",
+	"endAge",
+	"startYear",
+	"endYear",
+	"pensionablePay",
+	"payGrowthRate",
+	"employeeRate",
+	"employerRate",
+	"existingPot",
+	"customReturnRate"
+];
+
+export function createDefinedContribution(id) {
+	return {
+		id,
+		kind: "definedContribution",
+		name: "",
+		startAge: "",
+		endAge: "",
+		startYear: "",
+		endYear: "",
+		pensionablePay: "",
+		payGrowthRate: 0,
+		employeeRate: 5,
+		employerRate: 3,
+		pastPotMethod: "known",
+		existingPot: "",
+		earnings: [],
+		returnMode: "balanced",
+		customReturnRate: ""
+	};
+}
 
 export function createDefinedBenefit(id) {
 	return {
@@ -93,6 +127,8 @@ export function fromDocument(document) {
 		version !== 3 &&
 		version !== 4 &&
 		version !== 5 &&
+		version !== 6 &&
+		version !== 7 &&
 		version !== FORMAT_VERSION
 	) {
 		throw new Error("Unsupported pension draft format version");
@@ -118,6 +154,7 @@ export function fromDocument(document) {
 		const label = `Pension ${index + 1}`;
 		if (pension === null || typeof pension !== "object") throw new Error(`${label} is invalid`);
 		const isDb = version >= 2 && pension.kind === "definedBenefit";
+		const isDc = version >= 7 && pension.kind === "definedContribution";
 		assertFields(
 			pension,
 			isDb
@@ -132,7 +169,7 @@ export function fromDocument(document) {
 							...dbNumbers.filter(
 								(field) => version >= 5 || (field !== "serviceStartAge" && field !== "leaveAge")
 							),
-							...(version < FORMAT_VERSION ? ["pastServiceYears"] : []),
+							...(version < 6 ? ["pastServiceYears"] : []),
 							"earnings"
 						]
 					: [
@@ -148,7 +185,20 @@ export function fromDocument(document) {
 							"pastServiceYears",
 							"earnings"
 						]
-				: ["id", "kind", "name", "amount"],
+				: isDc
+					? [
+							"id",
+							"kind",
+							"name",
+							...dcNumbers.filter(
+								(field) =>
+									version === FORMAT_VERSION || (field !== "startAge" && field !== "endAge")
+							),
+							"pastPotMethod",
+							"earnings",
+							"returnMode"
+						]
+					: ["id", "kind", "name", "amount"],
 			label
 		);
 		if (
@@ -161,7 +211,11 @@ export function fromDocument(document) {
 		}
 		ids.add(pension.id);
 		highestId = Math.max(highestId, pension.id);
-		if (!isDb && !(version >= 3 ? simpleKinds : ["pot", "income"]).includes(pension.kind)) {
+		if (
+			!isDb &&
+			!isDc &&
+			!(version >= 3 ? simpleKinds : ["pot", "income"]).includes(pension.kind)
+		) {
 			throw new Error(`${label} has an unknown kind`);
 		}
 		if (typeof pension.name !== "string") throw new Error(`${label} name must be text`);
@@ -174,8 +228,7 @@ export function fromDocument(document) {
 			if (!["estimate", "yearly", ...(version >= 4 ? ["known"] : [])].includes(accrualMethod))
 				throw new Error(`${label} past accrual method is invalid`);
 			if (!Array.isArray(pension.earnings)) throw new Error(`${label} earnings must be an array`);
-			if (version < FORMAT_VERSION)
-				documentNumber(pension.pastServiceYears, `${label} completed service years`);
+			if (version < 6) documentNumber(pension.pastServiceYears, `${label} completed service years`);
 			const restored = {
 				id: pension.id,
 				kind: pension.kind,
@@ -198,6 +251,40 @@ export function fromDocument(document) {
 				};
 			});
 			return restored;
+		}
+		if (isDc) {
+			if (!["known", "estimate", "yearly"].includes(pension.pastPotMethod))
+				throw new Error(`${label} has an unknown past-pot method`);
+			if (!["cautious", "balanced", "optimistic", "custom"].includes(pension.returnMode))
+				throw new Error(`${label} has an unknown return mode`);
+			if (!Array.isArray(pension.earnings)) throw new Error(`${label} earnings must be an array`);
+			const restored = {
+				id: pension.id,
+				kind: pension.kind,
+				name: pension.name,
+				pastPotMethod: pension.pastPotMethod,
+				returnMode: pension.returnMode
+			};
+			for (const field of dcNumbers)
+				restored[field] =
+					version < FORMAT_VERSION && (field === "startAge" || field === "endAge")
+						? ""
+						: (documentNumber(pension[field], `${label} ${field}`) ?? "");
+			restored.earnings = pension.earnings.map((row) => {
+				assertFields(row, ["year", "pay"], `${label} earnings row`);
+				return {
+					year: documentNumber(row.year, "Earnings year") ?? "",
+					pay: documentNumber(row.pay, "Earnings pay") ?? ""
+				};
+			});
+			return restored;
+		}
+		if (pension.kind === "definedContribution") {
+			return {
+				...createDefinedContribution(pension.id),
+				name: pension.name,
+				existingPot: documentNumber(pension.amount, `${label} amount`) ?? ""
+			};
 		}
 		return {
 			id: pension.id,
@@ -233,6 +320,21 @@ export function toDocument(draft) {
 		formatVersion: FORMAT_VERSION,
 		currentAge: formNumber(draft.currentAge, "Current age"),
 		pensions: draft.pensions.map((pension) => {
+			if (pension.kind === "definedContribution") {
+				const entry = {
+					id: pension.id,
+					kind: pension.kind,
+					name: pension.name,
+					pastPotMethod: pension.pastPotMethod,
+					returnMode: pension.returnMode
+				};
+				for (const field of dcNumbers) entry[field] = formNumber(pension[field], field);
+				entry.earnings = pension.earnings.map((row) => ({
+					year: formNumber(row.year, "Earnings year"),
+					pay: formNumber(row.pay, "Earnings pay")
+				}));
+				return entry;
+			}
 			if (pension.kind !== "definedBenefit") {
 				return {
 					id: pension.id,
