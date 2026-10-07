@@ -9,6 +9,8 @@
 	import { projectedStatePensionAnnual } from "$lib/state-pension.js";
 	import { DEFAULT_INFLATION_RATE, realTermsValue } from "$lib/real-terms.js";
 	import { drawdownResult, drawdownStartingBalance } from "$lib/drawdown.js";
+	import { retirementIncomeChartData } from "$lib/retirement-income-chart.js";
+	import AnnualIncomeChart from "$lib/AnnualIncomeChart.svelte";
 
 	const draft = getContext("pension-draft");
 	const currentYear = new Date().getFullYear();
@@ -23,7 +25,7 @@
 		{ name: "Optimistic (9%)", value: "optimistic" },
 		{ name: "Custom", value: "custom" }
 	];
-	let showRealTerms = $state(false);
+	let showRealTerms = $state(true);
 
 	function amountInSelectedTerms(item) {
 		return showRealTerms
@@ -94,6 +96,8 @@
 				if (pension.kind === "statePension") {
 					resources.incomes.push({
 						id: pension.id,
+						kind: pension.kind,
+						pension,
 						name: sourceName(pension, "State Pension"),
 						amount: projectedStatePensionAnnual(pension, draft.currentAge),
 						valuationAge: Number(pension.qualifyingAge),
@@ -103,6 +107,7 @@
 					const result = definedBenefitResult(pension, draft.currentAge, currentYear);
 					resources.incomes.push({
 						id: pension.id,
+						kind: pension.kind,
 						name: sourceName(pension, "Defined benefit pension"),
 						amount: result.annualIncome,
 						valuationAge: result.valuationAge,
@@ -160,6 +165,7 @@
 				} else if (pension.kind === "income" && pension.amount !== "") {
 					resources.incomes.push({
 						id: pension.id,
+						kind: pension.kind,
 						name: sourceName(pension, "Previous pension income"),
 						amount: Number(pension.amount),
 						valuationAge: Number(draft.retirementAge),
@@ -175,6 +181,24 @@
 	}
 
 	const resources = $derived.by(retirementResources);
+
+	function retirementChartData() {
+		const pots = resources.pots.map((item) => ({
+			name: item.name,
+			annualWithdrawals: drawdownFor(item).result?.annualWithdrawals ?? []
+		}));
+		return retirementIncomeChartData({
+			currentAge: draft.currentAge,
+			retirementAge: draft.retirementAge,
+			finalAge: draft.finalAge,
+			incomes: resources.incomes,
+			pots,
+			targetAnnualIncome: draft.annualIncome,
+			realTerms: showRealTerms
+		});
+	}
+
+	const incomeChart = $derived.by(retirementChartData);
 </script>
 
 <svelte:head>
@@ -212,7 +236,7 @@
 				<Input id="final-age" type="number" min="18" max="120" bind:value={draft.finalAge} />
 			</div>
 			<div>
-				<Label for="annual-income">Target annual income (£)</Label>
+				<Label for="annual-income">Target annual income (£, today's prices)</Label>
 				<Input id="annual-income" type="number" min="0" step="1" bind:value={draft.annualIncome} />
 			</div>
 		</div>
@@ -398,6 +422,20 @@
 	</section>
 
 	<aside class="pension-aside">
+		<p class="pension-aside-label">INCOME PROJECTION</p>
+		<h2>Annual retirement income</h2>
+		<AnnualIncomeChart
+			ages={incomeChart.ages}
+			series={incomeChart.series}
+			targetValues={incomeChart.targetValues}
+		/>
+		<p class="pension-chart-note">
+			{showRealTerms ? "Real terms use today's prices." : "Values shown in actual prices."}
+			{#if incomeChart.targetValues}
+				Dashed line shows your target in today's prices, uprated by 2.5% for actual prices.
+			{/if}
+		</p>
+		<hr class="pension-projection-divider" />
 		<p class="pension-aside-label">PROJECTION</p>
 		<h2>Your drawdown plan</h2>
 		<p class="pension-muted">

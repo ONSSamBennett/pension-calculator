@@ -57,9 +57,11 @@ export function drawdownResult(startingBalance, options, currentAge, finalAge) {
 	let balance = balanceAtStart;
 	let totalWithdrawals = 0;
 	let dryAge = balance <= 0 ? start : null;
+	const annualWithdrawals = [];
 	for (let year = start; year <= end && dryAge === null; year++) {
 		const amount =
 			options.withdrawalMethod === "amount" ? Math.min(balance, withdrawal) : balance * withdrawal;
+		annualWithdrawals.push({ age: year, amount });
 		balance -= amount;
 		totalWithdrawals += amount;
 		if (balance <= 0) {
@@ -72,5 +74,11 @@ export function drawdownResult(startingBalance, options, currentAge, finalAge) {
 	if (!Number.isFinite(balance) || !Number.isFinite(totalWithdrawals)) {
 		throw new Error("These assumptions produce an invalid drawdown projection");
 	}
-	return { startingBalance: balanceAtStart, totalWithdrawals, endingBalance: balance, dryAge };
+	return {
+		startingBalance: balanceAtStart,
+		totalWithdrawals,
+		endingBalance: balance,
+		dryAge,
+		annualWithdrawals
+	};
 }

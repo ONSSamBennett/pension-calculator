@@ -19,6 +19,7 @@ import { personalSavingsResult } from "./personal-savings.js";
 import { propertyEquityResult } from "./property-equity.js";
 import { DEFAULT_INFLATION_RATE, realTermsValue } from "./real-terms.js";
 import { drawdownResult, drawdownStartingBalance } from "./drawdown.js";
+import { retirementIncomeChartData } from "./retirement-income-chart.js";
 
 test("fixed and percentage drawdown report whether and when a pot runs dry", () => {
 	const fixed = {
@@ -32,7 +33,13 @@ test("fixed and percentage drawdown report whether and when a pot runs dry", () 
 		startingBalance: 100000,
 		totalWithdrawals: 100000,
 		endingBalance: 0,
-		dryAge: 70
+		dryAge: 70,
+		annualWithdrawals: [
+			{ age: 67, amount: 25000 },
+			{ age: 68, amount: 25000 },
+			{ age: 69, amount: 25000 },
+			{ age: 70, amount: 25000 }
+		]
 	});
 	const percentage = {
 		...fixed,
@@ -43,7 +50,12 @@ test("fixed and percentage drawdown report whether and when a pot runs dry", () 
 		startingBalance: 100000,
 		totalWithdrawals: 87500,
 		endingBalance: 12500,
-		dryAge: null
+		dryAge: null,
+		annualWithdrawals: [
+			{ age: 67, amount: 50000 },
+			{ age: 68, amount: 25000 },
+			{ age: 69, amount: 12500 }
+		]
 	});
 	percentage.withdrawalRate = 100;
 	assert.equal(drawdownResult(100000, percentage, 40, 95).dryAge, 67);
@@ -51,6 +63,51 @@ test("fixed and percentage drawdown report whether and when a pot runs dry", () 
 		() => drawdownResult(100000, { ...fixed, annualAmount: "" }, 40, 95),
 		/annual withdrawal amount/
 	);
+});
+
+test("retirement chart data stacks income and drawdown by age in selected prices", () => {
+	const inputs = {
+		currentAge: 40,
+		retirementAge: 67,
+		finalAge: 68,
+		incomes: [
+			{
+				name: "State Pension",
+				kind: "statePension",
+				amount: 1000,
+				valuationAge: 67,
+				pension: { annualIncreaseRate: 2 }
+			}
+		],
+		pots: [
+			{
+				name: "ISA",
+				annualWithdrawals: [
+					{ age: 67, amount: 500 },
+					{ age: 68, amount: 400 }
+				]
+			}
+		],
+		targetAnnualIncome: 2000,
+		realTerms: false
+	};
+	const actual = retirementIncomeChartData(inputs);
+	assert.deepEqual(actual.ages, [67, 68]);
+	assert.deepEqual(actual.series, [
+		{ name: "State Pension", values: [1000, 1020] },
+		{ name: "ISA", values: [500, 400] }
+	]);
+	assert.ok(Math.abs(actual.targetValues[0] - 2000 * 1.025 ** 27) < 0.001);
+	assert.ok(Math.abs(actual.targetValues[1] - 2000 * 1.025 ** 28) < 0.001);
+	const real = retirementIncomeChartData({ ...inputs, realTerms: true });
+	assert.ok(Math.abs(real.series[0].values[0] - 1000 / 1.025 ** 27) < 0.001);
+	assert.ok(Math.abs(real.series[1].values[0] - 500 / 1.025 ** 27) < 0.001);
+	assert.deepEqual(real.targetValues, [2000, 2000]);
+	assert.deepEqual(retirementIncomeChartData({ ...inputs, finalAge: 30 }), {
+		ages: [],
+		series: [],
+		targetValues: null
+	});
 });
 
 test("drawdown starting balance grows from current age at its selected return", () => {
