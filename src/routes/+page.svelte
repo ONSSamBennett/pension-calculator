@@ -33,10 +33,6 @@
 		pot: "Name",
 		income: "Name"
 	};
-	const statuses = [
-		{ name: "Not yet started", value: "notStarted" },
-		{ name: "Already being paid", value: "inPayment" }
-	];
 	const schemes = [
 		{ name: "Final salary", value: "finalSalary" },
 		{ name: "Career average (CARE)", value: "care" }
@@ -80,6 +76,15 @@
 			return { error: error.message };
 		}
 	}
+
+	function hasCompletedService(pension) {
+		return (
+			pension.serviceStartAge !== "" &&
+			pension.leaveAge !== "" &&
+			Number.isInteger(Number(draft.currentAge)) &&
+			Number(pension.serviceStartAge) < Math.min(Number(draft.currentAge), Number(pension.leaveAge))
+		);
+	}
 </script>
 
 <svelte:head>
@@ -120,11 +125,23 @@
 		{#each draft.pensions as pension (pension.id)}
 			<div class="pension-entry">
 				<div class="pension-entry-heading">
-					<h3>
-						Source {draft.pensions.indexOf(pension) + 1}{pension.kind !== "unselected"
-							? ` - ${[...kinds, ...legacyKinds].find((type) => type.value === pension.kind)?.name}`
-							: ""}
-					</h3>
+					{#if pension.kind === "definedBenefit"}
+						<h3 class="pension-entry-name">
+							<label for={`name-${pension.id}`}>Scheme name</label>
+							<input
+								id={`name-${pension.id}`}
+								type="text"
+								class="pension-name-input"
+								bind:value={pension.name}
+							/>
+						</h3>
+					{:else}
+						<h3>
+							Source {draft.pensions.indexOf(pension) + 1}{pension.kind !== "unselected"
+								? ` - ${[...kinds, ...legacyKinds].find((type) => type.value === pension.kind)?.name}`
+								: ""}
+						</h3>
+					{/if}
 					<Button
 						color="light"
 						size="sm"
@@ -152,14 +169,6 @@
 				{#if pension.kind === "definedBenefit"}
 					<div class="pension-fields">
 						<div>
-							<Label for={`name-${pension.id}`}>Scheme name</Label>
-							<Input id={`name-${pension.id}`} bind:value={pension.name} />
-						</div>
-						<div>
-							<Label for={`status-${pension.id}`}>Payment status</Label>
-							<Select id={`status-${pension.id}`} items={statuses} bind:value={pension.status} />
-						</div>
-						<div>
 							<Label for={`service-start-${pension.id}`}
 								>Age eligible service began or will begin</Label
 							>
@@ -184,30 +193,21 @@
 							/>
 							{#if pension.leaveAge !== "" && pension.serviceStartAge !== "" && Number(pension.leaveAge) < Number(pension.serviceStartAge)}
 								<p class="pension-error">Leave age must be after service start age.</p>
-							{:else if pension.status === "notStarted" && pension.leaveAge !== "" && pension.startAge !== "" && Number(pension.leaveAge) > Number(pension.startAge)}
-								<p class="pension-error">Leave age cannot be after pension start age.</p>
 							{/if}
 						</div>
 					</div>
 					{#if pension.status === "inPayment"}
-						<div class="pension-fields pension-extra-fields">
-							<div>
-								<Label for={`annual-${pension.id}`}>Gross annual pension now (£)</Label>
-								<Input
-									id={`annual-${pension.id}`}
-									type="number"
-									min="0"
-									step="1"
-									bind:value={pension.annualIncome}
-								/>
-							</div>
+						<p class="pension-note">
+							This saved scheme was marked as already paying. Its recorded payment is retained for
+							later use, but is not included in this scheme estimate.
+						</p>
+					{/if}
+					<div class="pension-fields pension-extra-fields">
+						<div>
+							<Label for={`scheme-${pension.id}`}>Scheme type</Label>
+							<Select id={`scheme-${pension.id}`} items={schemes} bind:value={pension.scheme} />
 						</div>
-					{:else}
-						<div class="pension-fields pension-extra-fields">
-							<div>
-								<Label for={`scheme-${pension.id}`}>Scheme type</Label>
-								<Select id={`scheme-${pension.id}`} items={schemes} bind:value={pension.scheme} />
-							</div>
+						{#if hasCompletedService(pension)}
 							<div>
 								<Label for={`method-${pension.id}`}>Past accrual</Label>
 								<Select
@@ -216,196 +216,152 @@
 									bind:value={pension.accrualMethod}
 								/>
 							</div>
-							{#if pension.accrualMethod !== "yearly" && (pension.accrualMethod !== "known" || Number(pension.leaveAge) > Math.max(Number(draft.currentAge), Number(pension.serviceStartAge)))}
-								<div>
-									<Label for={`pay-${pension.id}`}
-										>{pension.leaveAge !== "" && Number(pension.leaveAge) < Number(draft.currentAge)
-											? "Pensionable pay when you left (£)"
-											: "Current pensionable pay (£)"}</Label
-									>
-									<Input
-										id={`pay-${pension.id}`}
-										type="number"
-										min="0"
-										step="1"
-										bind:value={pension.pensionablePay}
-									/>
-								</div>
-							{/if}
+						{/if}
+						{#if (!hasCompletedService(pension) || pension.accrualMethod !== "yearly") && (!hasCompletedService(pension) || pension.accrualMethod !== "known" || Number(pension.leaveAge) > Math.max(Number(draft.currentAge), Number(pension.serviceStartAge)))}
 							<div>
-								<Label for={`normal-${pension.id}`}>Normal scheme pension age</Label>
+								<Label for={`pay-${pension.id}`}
+									>{pension.leaveAge !== "" && Number(pension.leaveAge) < Number(draft.currentAge)
+										? "Pensionable pay when you left (£)"
+										: "Current pensionable pay (£)"}</Label
+								>
 								<Input
-									id={`normal-${pension.id}`}
-									type="number"
-									min="18"
-									max="120"
-									step="1"
-									bind:value={pension.normalAge}
-								/>
-							</div>
-							<div>
-								<Label for={`start-${pension.id}`}>Age to start this pension</Label>
-								<Input
-									id={`start-${pension.id}`}
-									type="number"
-									min="18"
-									max="120"
-									step="1"
-									bind:value={pension.startAge}
-								/>
-								{#if pension.startAge !== "" && Number(pension.startAge) < Number(draft.currentAge)}
-									<p class="pension-error">Start age cannot be before your current age.</p>
-								{/if}
-							</div>
-							{#if pension.accrualMethod !== "known" || Number(pension.leaveAge) > Math.max(Number(draft.currentAge), Number(pension.serviceStartAge))}
-								<div>
-									<Label for={`accrual-${pension.id}`}
-										>Accrual denominator (for 1/60, enter 60)</Label
-									>
-									<Input
-										id={`accrual-${pension.id}`}
-										type="number"
-										min="1"
-										step="1"
-										bind:value={pension.accrualDenominator}
-									/>
-								</div>
-							{/if}
-							{#if pension.leaveAge !== "" && Number(pension.leaveAge) > Number(draft.currentAge)}
-								<div>
-									<Label for={`growth-${pension.id}`}>Annual pay growth (%)</Label>
-									<Input
-										id={`growth-${pension.id}`}
-										type="number"
-										min="-100"
-										step="0.1"
-										bind:value={pension.payGrowthRate}
-									/>
-								</div>
-							{/if}
-							<div>
-								<Label for={`adjust-${pension.id}`}>Scheme adjustment at chosen age (%)</Label>
-								<Input
-									id={`adjust-${pension.id}`}
-									type="number"
-									min="-100"
-									step="0.1"
-									bind:value={pension.adjustmentRate}
-								/>
-							</div>
-							<div>
-								<Label for={`lump-${pension.id}`}>Quoted automatic lump sum (£, optional)</Label>
-								<Input
-									id={`lump-${pension.id}`}
+									id={`pay-${pension.id}`}
 									type="number"
 									min="0"
 									step="1"
-									bind:value={pension.lumpSum}
+									bind:value={pension.pensionablePay}
 								/>
 							</div>
-							{#if pension.scheme === "care"}
-								<div>
-									<Label for={`revalue-${pension.id}`}>Annual CARE revaluation (%)</Label>
-									<Input
-										id={`revalue-${pension.id}`}
-										type="number"
-										min="-100"
-										step="0.1"
-										bind:value={pension.revaluationRate}
-									/>
-								</div>
-							{/if}
-							{#if pension.accrualMethod === "known"}
-								<div>
-									<Label for={`accrued-${pension.id}`}
-										>Current accrued gross annual pension (£)</Label
-									>
-									<Input
-										id={`accrued-${pension.id}`}
-										type="number"
-										min="0"
-										step="1"
-										bind:value={pension.accruedAnnualPension}
-									/>
-								</div>
-							{/if}
+						{/if}
+						<div>
+							<Label for={`normal-${pension.id}`}>Normal scheme pension age</Label>
+							<Input
+								id={`normal-${pension.id}`}
+								type="number"
+								min="18"
+								max="120"
+								step="1"
+								bind:value={pension.normalAge}
+							/>
 						</div>
-						{#if pension.accrualMethod === "yearly"}
-							<div class="pension-earnings">
-								<h4>Pensionable pay by completed service year</h4>
-								{#each pension.earnings as row, index}
-									<div class="pension-earnings-row">
-										<div>
-											<Label for={`year-${pension.id}-${index}`}>Year</Label><Input
-												id={`year-${pension.id}-${index}`}
-												type="number"
-												min="1900"
-												step="1"
-												bind:value={row.year}
-											/>
-										</div>
-										<div>
-											<Label for={`earnings-${pension.id}-${index}`}>Pensionable pay (£)</Label
-											><Input
-												id={`earnings-${pension.id}-${index}`}
-												type="number"
-												min="0"
-												step="1"
-												bind:value={row.pay}
-											/>
-										</div>
-										<Button
-											color="light"
-											size="sm"
-											onclick={() => pension.earnings.splice(index, 1)}>Remove year</Button
-										>
-									</div>
-								{/each}
-								<Button
-									color="light"
-									size="sm"
-									onclick={() => pension.earnings.push({ year: "", pay: "" })}>Add year</Button
+						{#if !hasCompletedService(pension) || pension.accrualMethod !== "known" || Number(pension.leaveAge) > Math.max(Number(draft.currentAge), Number(pension.serviceStartAge))}
+							<div>
+								<Label for={`accrual-${pension.id}`}>Accrual denominator (for 1/60, enter 60)</Label
 								>
+								<Input
+									id={`accrual-${pension.id}`}
+									type="number"
+									min="1"
+									step="1"
+									bind:value={pension.accrualDenominator}
+								/>
 							</div>
 						{/if}
-						<p class="pension-note">
-							New accrual and final-salary pay growth stop when you leave this scheme. CARE
-							revaluation continues until this pension starts. If it starts before or after normal
-							scheme age, enter the total adjustment quoted by your scheme.
-						</p>
-						{#if pension.accrualMethod === "known"}
-							<p class="pension-note">
-								Enter the annual pension already earned for past service, valued today before any
-								scheme adjustment. Completed service years are retained but not used for this
-								method; future accrual is estimated separately.
-							</p>
-						{:else if pension.accrualMethod === "yearly"}
-							<p class="pension-note">
-								{pension.scheme === "finalSalary"
-									? "Final salary uses your most recent entered pay to project final pensionable pay. Earlier pay is not averaged."
-									: "CARE sums the accrued pension from each entered year and revalues it to pension start."}
-								Enter one row for each completed service year.
-							</p>
-						{:else if pension.scheme === "care"}
-							<p class="pension-note">
-								Past CARE earnings are approximated using your current pensionable pay. Enter pay by
-								year for a more detailed estimate.
-							</p>
+						{#if pension.leaveAge !== "" && Number(pension.leaveAge) > Number(draft.currentAge)}
+							<div>
+								<Label for={`growth-${pension.id}`}>Annual pay growth (%)</Label>
+								<Input
+									id={`growth-${pension.id}`}
+									type="number"
+									min="-100"
+									step="0.1"
+									bind:value={pension.payGrowthRate}
+								/>
+							</div>
 						{/if}
+						{#if pension.scheme === "care"}
+							<div>
+								<Label for={`revalue-${pension.id}`}>Annual CARE revaluation (%)</Label>
+								<Input
+									id={`revalue-${pension.id}`}
+									type="number"
+									min="-100"
+									step="0.1"
+									bind:value={pension.revaluationRate}
+								/>
+							</div>
+						{/if}
+						{#if hasCompletedService(pension) && pension.accrualMethod === "known"}
+							<div>
+								<Label for={`accrued-${pension.id}`}>Current accrued gross annual pension (£)</Label
+								>
+								<Input
+									id={`accrued-${pension.id}`}
+									type="number"
+									min="0"
+									step="1"
+									bind:value={pension.accruedAnnualPension}
+								/>
+							</div>
+						{/if}
+					</div>
+					{#if hasCompletedService(pension) && pension.accrualMethod === "yearly"}
+						<div class="pension-earnings">
+							<h4>Pensionable pay by completed service year</h4>
+							{#each pension.earnings as row, index}
+								<div class="pension-earnings-row">
+									<div>
+										<Label for={`year-${pension.id}-${index}`}>Year</Label><Input
+											id={`year-${pension.id}-${index}`}
+											type="number"
+											min="1900"
+											step="1"
+											bind:value={row.year}
+										/>
+									</div>
+									<div>
+										<Label for={`earnings-${pension.id}-${index}`}>Pensionable pay (£)</Label><Input
+											id={`earnings-${pension.id}-${index}`}
+											type="number"
+											min="0"
+											step="1"
+											bind:value={row.pay}
+										/>
+									</div>
+									<Button color="light" size="sm" onclick={() => pension.earnings.splice(index, 1)}
+										>Remove year</Button
+									>
+								</div>
+							{/each}
+							<Button
+								color="light"
+								size="sm"
+								onclick={() => pension.earnings.push({ year: "", pay: "" })}>Add year</Button
+							>
+						</div>
+					{/if}
+					<p class="pension-note">
+						New accrual and final-salary pay growth stop when you leave this scheme. CARE
+						revaluation continues to normal scheme age, or later leave age. Payment timing and
+						scheme adjustments will be handled in withdrawals.
+					</p>
+					{#if hasCompletedService(pension) && pension.accrualMethod === "known"}
+						<p class="pension-note">
+							Enter the annual pension already earned for past service, valued today before any
+							scheme adjustment. Completed service years are retained but not used for this method;
+							future accrual is estimated separately.
+						</p>
+					{:else if hasCompletedService(pension) && pension.accrualMethod === "yearly"}
+						<p class="pension-note">
+							{pension.scheme === "finalSalary"
+								? "Final salary uses your most recent entered pay to project final pensionable pay. Earlier pay is not averaged."
+								: "CARE sums the accrued pension from each entered year and revalues it to pension start."}
+							Enter one row for each completed service year.
+						</p>
+					{:else if hasCompletedService(pension) && pension.scheme === "care"}
+						<p class="pension-note">
+							Past CARE earnings are approximated using your current pensionable pay. Enter pay by
+							year for a more detailed estimate.
+						</p>
 					{/if}
 					{@const calculation = resultFor(pension)}
 					<div class="pension-result" aria-live="polite">
 						{#if calculation.result}
 							<strong
-								>{calculation.result.estimated
-									? "Estimated gross annual pension"
-									: "Gross annual pension now"}: {pounds.format(
+								>Estimated gross annual pension at age {calculation.result.valuationAge}: {pounds.format(
 									calculation.result.annualIncome
 								)}</strong
 							>
-							{#if calculation.result.estimated && calculation.result.lumpSum > 0}<p>
-									Quoted automatic lump sum at start: {pounds.format(calculation.result.lumpSum)}
-								</p>{/if}
 						{:else}
 							<p>{calculation.error}</p>
 						{/if}

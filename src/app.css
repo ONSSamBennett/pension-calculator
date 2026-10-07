@@ -161,6 +161,33 @@
 	margin: 0;
 }
 
+.pension-entry-name {
+	flex: 1;
+	min-width: 0;
+}
+
+.pension-entry-name label {
+	display: block;
+	font-size: 12px;
+	margin-bottom: 4px;
+}
+
+.pension-name-input {
+	width: min(100%, 380px);
+	border: 0;
+	border-bottom: 1px solid #aebfb2;
+	background: transparent;
+	color: var(--ink);
+	font-family: Georgia, serif;
+	font-size: 20px;
+	padding: 4px 0;
+}
+
+.pension-name-input:focus {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
 .pension-type-field {
 	max-width: 340px;
 	margin-bottom: 24px;

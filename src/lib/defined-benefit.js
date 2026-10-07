@@ -42,31 +42,18 @@ function yearlyEarnings(pension, currentAge, serviceStartAge, leaveAge, asOfYear
 }
 
 export function definedBenefitResult(pension, currentAge, asOfYear = new Date().getFullYear()) {
-	if (pension.status === "inPayment") {
-		return {
-			annualIncome: number(pension.annualIncome, "annual pension"),
-			lumpSum: 0,
-			estimated: false
-		};
-	}
-	if (pension.status !== "notStarted") throw new Error("Choose a pension status");
 	const now = age(currentAge, "current age");
-	const paymentAge = age(pension.startAge, "pension start age");
 	const serviceStartAge = number(pension.serviceStartAge, "age when eligible service began", 16);
 	const leaveAge = age(pension.leaveAge, "age when eligible service ends");
 	if (!Number.isInteger(serviceStartAge) || serviceStartAge > 120)
 		throw new Error("Enter a valid age when eligible service began");
-	age(pension.normalAge, "normal scheme pension age");
-	if (paymentAge < now) throw new Error("Pension start age must not be before current age");
+	const paymentAge = Math.max(now, leaveAge, age(pension.normalAge, "normal scheme pension age"));
 	if (leaveAge < serviceStartAge) throw new Error("Leave age must not be before service start age");
-	if (leaveAge > paymentAge) throw new Error("Leave age must not be after pension start age");
 	const yearsUntilPayment = paymentAge - now;
 	const yearsUntilLeave = Math.max(0, leaveAge - now);
 	const futureServiceStart = Math.max(0, serviceStartAge - now);
 	const futureServiceYears = Math.max(0, yearsUntilLeave - futureServiceStart);
 	const growth = number(pension.payGrowthRate, "annual pay growth", -100) / 100;
-	const adjustment = number(pension.adjustmentRate, "scheme adjustment", -100) / 100;
-	const lumpSum = pension.lumpSum === "" ? 0 : number(pension.lumpSum, "automatic lump sum");
 	if (pension.scheme !== "finalSalary" && pension.scheme !== "care") {
 		throw new Error("Choose a defined-benefit scheme type");
 	}
@@ -76,27 +63,28 @@ export function definedBenefitResult(pension, currentAge, asOfYear = new Date().
 		pension.scheme === "care"
 			? number(pension.revaluationRate, "annual CARE revaluation", -100) / 100
 			: 0;
-	const pastYears =
-		pension.accrualMethod === "known" ? 0 : Math.max(0, Math.min(now, leaveAge) - serviceStartAge);
+	const completedYears = Math.max(0, Math.min(now, leaveAge) - serviceStartAge);
+	const accrualMethod = completedYears ? pension.accrualMethod : "estimate";
+	const pastYears = accrualMethod === "known" ? 0 : completedYears;
 	const latest =
-		pension.accrualMethod === "yearly"
+		accrualMethod === "yearly"
 			? yearlyEarnings(pension, now, serviceStartAge, leaveAge, asOfYear, pastYears)
 			: null;
 	const pay =
-		pension.accrualMethod === "yearly"
+		accrualMethod === "yearly"
 			? latest
 				? latest.pay *
 					(1 + growth) ** Math.max(0, Math.min(asOfYear, asOfYear + leaveAge - now) - latest.year)
 				: 0
-			: futureServiceYears || pension.accrualMethod === "estimate"
+			: futureServiceYears || accrualMethod === "estimate"
 				? number(pension.pensionablePay, "current pensionable pay")
 				: 0;
 	const denominator =
-		futureServiceYears || pension.accrualMethod !== "known"
+		futureServiceYears || accrualMethod !== "known"
 			? number(pension.accrualDenominator, "accrual denominator", 1)
 			: 1;
 	let pastAccrual = 0;
-	if (pension.accrualMethod === "known") {
+	if (accrualMethod === "known") {
 		const accrued = number(pension.accruedAnnualPension, "accrued gross annual pension");
 		pastAccrual =
 			accrued *
@@ -104,7 +92,7 @@ export function definedBenefitResult(pension, currentAge, asOfYear = new Date().
 				(pension.scheme === "care" ? yearsUntilPayment : yearsUntilLeave);
 	} else if (pension.scheme === "finalSalary") {
 		pastAccrual = (pay * (1 + growth) ** yearsUntilLeave * pastYears) / denominator;
-	} else if (pension.accrualMethod === "estimate") {
+	} else if (accrualMethod === "estimate") {
 		for (let yearsAgo = 1; yearsAgo <= pastYears; yearsAgo++) {
 			pastAccrual +=
 				(pay / denominator) *
@@ -128,8 +116,8 @@ export function definedBenefitResult(pension, currentAge, asOfYear = new Date().
 		}
 	}
 
-	const annualIncome = (pastAccrual + futureAccrual) * (1 + adjustment);
+	const annualIncome = pastAccrual + futureAccrual;
 	if (!Number.isFinite(annualIncome))
 		throw new Error("These assumptions produce an invalid estimate");
-	return { annualIncome, lumpSum, estimated: true };
+	return { annualIncome, valuationAge: paymentAge, estimated: true };
 }
