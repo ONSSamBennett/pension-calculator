@@ -5,6 +5,11 @@ import tailwindcss from "@tailwindcss/vite";
 /** @type {import('vite').UserConfig} */
 const config = {
 	plugins: [tailwindcss(), sveltekit()],
+	server: {
+		watch: {
+			ignored: ["**/build/**"]
+		}
+	},
 	//removes console.logs in production
 	esbuild: {
 		drop: ["console", "debugger"]

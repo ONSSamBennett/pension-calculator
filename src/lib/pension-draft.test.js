@@ -5,6 +5,7 @@ import {
 	createDefaultDraft,
 	createDefinedBenefit,
 	createDefinedContribution,
+	createPersonalSavings,
 	createStatePension,
 	fromDocument,
 	toDocument
@@ -12,11 +13,12 @@ import {
 import { definedBenefitResult } from "./defined-benefit.js";
 import { definedContributionResult } from "./defined-contribution.js";
 import { projectedStatePensionAnnual, statePensionAnnual } from "./state-pension.js";
+import { personalSavingsResult } from "./personal-savings.js";
 
 test("default draft round-trips without turning blank fields into zero", () => {
 	const initial = createDefaultDraft();
 	const document = JSON.parse(JSON.stringify(toDocument(initial)));
-	assert.equal(document.formatVersion, 11);
+	assert.equal(document.formatVersion, 12);
 	assert.equal(document.currentAge, 40);
 	assert.deepEqual(document.pensions[0], {
 		id: 1,
@@ -165,7 +167,7 @@ test("invalid documents are rejected without changing the current draft", () => 
 	draft.pensions.push({ id: 2, kind: "pot", name: "", amount: "" });
 	const valid = toDocument(draft);
 	const invalid = [
-		{ ...valid, formatVersion: 12 },
+		{ ...valid, formatVersion: 13 },
 		{ ...valid, currentAge: 17 },
 		{ ...valid, currentAge: 42.5 },
 		{
@@ -275,13 +277,108 @@ test("an unselected source and each new type survive JSON round trips", () => {
 		createStatePension(1),
 		{ id: 2, kind: "unselected", name: "", amount: "" },
 		{ ...createDefinedContribution(3), name: "Workplace", existingPot: 150000 },
-		{ id: 4, kind: "personalSavings", name: "ISA", amount: 25000 },
+		{ ...createPersonalSavings(4), name: "ISA", currentBalance: 25000 },
 		{ id: 5, kind: "propertyEquity", name: "Home", amount: 100000 }
 	];
 	const document = JSON.parse(JSON.stringify(toDocument(draft)));
 	assert.equal(document.pensions[1].amount, null);
 	assert.deepEqual(fromDocument(document), { ...draft, nextId: 6 });
 	assert.throws(() => fromDocument({ ...document, formatVersion: 2 }));
+});
+
+test("older savings balances migrate without losing zero or blank values", () => {
+	const document = toDocument(createDefaultDraft());
+	for (const amount of [25000, 0, null]) {
+		const restored = fromDocument({
+			...document,
+			formatVersion: 11,
+			pensions: [document.pensions[0], { id: 4, kind: "personalSavings", name: "ISA", amount }]
+		});
+		assert.deepEqual(restored.pensions[1], {
+			...createPersonalSavings(4),
+			name: "ISA",
+			currentBalance: amount ?? ""
+		});
+		assert.equal(toDocument(restored).pensions[1].currentBalance, amount);
+	}
+});
+
+test("savings fields round-trip, while unknown fields and modes are rejected", () => {
+	const draft = createDefaultDraft();
+	const savings = createPersonalSavings(2);
+	Object.assign(savings, {
+		contributionFrequency: "weekly",
+		contributionAmount: 100,
+		endAge: 64,
+		customReturnRate: 4.5,
+		bonusRate: 25,
+		currentBalance: 0
+	});
+	draft.pensions.push(savings);
+	const document = JSON.parse(JSON.stringify(toDocument(draft)));
+	assert.equal(document.pensions[1].annualFeeRate, null);
+	assert.equal(document.pensions[1].currentBalance, 0);
+	assert.deepEqual(fromDocument(document).pensions[1], savings);
+	for (const source of [
+		{ ...document.pensions[1], contributionFrequency: "daily" },
+		{ ...document.pensions[1], returnMode: "unknown" },
+		{ ...document.pensions[1], bonusRate: Infinity },
+		{ ...document.pensions[1], amount: 1 }
+	]) {
+		assert.throws(() => applyDocument(draft, { ...document, pensions: [source] }));
+		assert.deepEqual(draft.pensions[1], savings);
+	}
+});
+
+test("savings deposits and bonus arrive at period end and grow until retirement", () => {
+	const savings = createPersonalSavings(2);
+	Object.assign(savings, {
+		currentBalance: 1000,
+		contributionAmount: 100,
+		endAge: 40,
+		bonusRate: 25
+	});
+	const result = personalSavingsResult(savings, 40, 42);
+	assert.equal(result.futureContributions, 100);
+	assert.equal(result.futureBonus, 25);
+	assert.ok(Math.abs(result.projectedBalance - (1000 * 1.06 ** 2 + 125 * 1.06)) < 0.01);
+	assert.ok(
+		Math.abs(
+			1000 +
+				result.futureContributions +
+				result.futureBonus +
+				result.futureInvestmentGrowth -
+				result.futureFeesPaid -
+				result.projectedBalance
+		) < 0.01
+	);
+	savings.endAge = 39;
+	assert.equal(personalSavingsResult(savings, 40, 42).futureContributions, 0);
+	assert.equal(personalSavingsResult(savings, 40, 40).projectedBalance, 1000);
+});
+
+test("savings contribution frequency, annual increase, return and fees change projection", () => {
+	const savings = createPersonalSavings(2);
+	Object.assign(savings, { contributionAmount: 100, endAge: 41, contributionIncreaseRate: 2.5 });
+	assert.equal(personalSavingsResult(savings, 40, 42).futureContributions, 202.5);
+	savings.contributionFrequency = "monthly";
+	assert.ok(Math.abs(personalSavingsResult(savings, 40, 42).futureContributions - 2430) < 0.01);
+	const monthly = personalSavingsResult(savings, 40, 42);
+	savings.contributionFrequency = "weekly";
+	assert.equal(personalSavingsResult(savings, 40, 42).futureContributions, 10530);
+	savings.contributionFrequency = "monthly";
+	savings.annualFeeRate = 1;
+	assert.ok(personalSavingsResult(savings, 40, 42).projectedBalance < monthly.projectedBalance);
+	savings.returnMode = "custom";
+	savings.customReturnRate = 0;
+	savings.annualFeeRate = "";
+	assert.ok(Math.abs(personalSavingsResult(savings, 40, 42).projectedBalance - 2430) < 0.01);
+	savings.customReturnRate = "";
+	assert.throws(() => personalSavingsResult(savings, 40, 42), /custom annual return/);
+	savings.returnMode = "optimistic";
+	savings.endAge = "";
+	assert.throws(() => personalSavingsResult(savings, 40, 42), /age when contributions end/);
+	assert.throws(() => personalSavingsResult(savings, 40, 39), /target retirement age/);
 });
 
 test("old defined-contribution amounts migrate to a known existing pot", () => {

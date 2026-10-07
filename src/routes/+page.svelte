@@ -2,10 +2,15 @@
 	import { getContext } from "svelte";
 	import { resolve } from "$app/paths";
 	import { Button, Input, Label, Select } from "flowbite-svelte";
-	import { createDefinedBenefit, createDefinedContribution } from "$lib/pension-draft.js";
+	import {
+		createDefinedBenefit,
+		createDefinedContribution,
+		createPersonalSavings
+	} from "$lib/pension-draft.js";
 	import { definedBenefitResult } from "$lib/defined-benefit.js";
 	import { definedContributionResult } from "$lib/defined-contribution.js";
 	import { projectedStatePensionAnnual, statePensionAnnual } from "$lib/state-pension.js";
+	import { personalSavingsResult } from "$lib/personal-savings.js";
 
 	const draft = getContext("pension-draft");
 	const kinds = [
@@ -19,13 +24,11 @@
 		{ name: "Projected annual pension (previous entry)", value: "income" }
 	];
 	const amounts = {
-		personalSavings: "Current savings balance (£)",
 		propertyEquity: "Estimated available property equity (£)",
 		pot: "Current pot value (£)",
 		income: "Annual income (£)"
 	};
 	const names = {
-		personalSavings: "Account name",
 		propertyEquity: "Property name",
 		pot: "Name",
 		income: "Name"
@@ -49,6 +52,11 @@
 		{ name: "Balanced (6%)", value: "balanced" },
 		{ name: "Optimistic (9%)", value: "optimistic" },
 		{ name: "Custom", value: "custom" }
+	];
+	const contributionFrequencies = [
+		{ name: "Yearly", value: "yearly" },
+		{ name: "Monthly", value: "monthly" },
+		{ name: "Weekly", value: "weekly" }
 	];
 	const currentYear = new Date().getFullYear();
 	const pounds = new Intl.NumberFormat("en-GB", {
@@ -78,7 +86,9 @@
 				? { ...createDefinedBenefit(pension.id), name: pension.name }
 				: kind === "definedContribution"
 					? { ...createDefinedContribution(pension.id), name: pension.name }
-					: { id: pension.id, kind, name: pension.name, amount: "" };
+					: kind === "personalSavings"
+						? { ...createPersonalSavings(pension.id), name: pension.name }
+						: { id: pension.id, kind, name: pension.name, amount: "" };
 	}
 
 	function resultFor(pension) {
@@ -110,6 +120,14 @@
 				amount: statePensionAnnual(pension),
 				projected: projectedStatePensionAnnual(pension, draft.currentAge)
 			};
+		} catch (error) {
+			return { error: error.message };
+		}
+	}
+
+	function savingsResultFor(pension) {
+		try {
+			return { result: personalSavingsResult(pension, draft.currentAge, draft.retirementAge) };
 		} catch (error) {
 			return { error: error.message };
 		}
@@ -179,10 +197,14 @@
 				<div class="pension-entry-heading">
 					{#if pension.kind === "statePension"}
 						<h3>State Pension</h3>
-					{:else if pension.kind === "definedBenefit" || pension.kind === "definedContribution"}
+					{:else if pension.kind === "definedBenefit" || pension.kind === "definedContribution" || pension.kind === "personalSavings"}
 						<h3 class="pension-entry-name">
 							<label for={`name-${pension.id}`}
-								>{pension.kind === "definedBenefit" ? "Scheme name" : "Pension name"}</label
+								>{pension.kind === "definedBenefit"
+									? "Scheme name"
+									: pension.kind === "definedContribution"
+										? "Pension name"
+										: "Savings name"}</label
 							>
 							<input
 								id={`name-${pension.id}`}
@@ -665,6 +687,126 @@
 							<p>Future fees: {pounds.format(-projection.result.futureFeesPaid)}</p>
 						{:else}<p>{projection.error}</p>{/if}
 					</div>
+				{:else if pension.kind === "personalSavings"}
+					<div class="pension-fields">
+						<div>
+							<Label for={`savings-balance-${pension.id}`}>Current balance (£)</Label>
+							<Input
+								id={`savings-balance-${pension.id}`}
+								type="number"
+								min="0"
+								step="1"
+								bind:value={pension.currentBalance}
+							/>
+						</div>
+						<div>
+							<Label for={`savings-frequency-${pension.id}`}>Contribution frequency</Label>
+							<Select
+								id={`savings-frequency-${pension.id}`}
+								items={contributionFrequencies}
+								bind:value={pension.contributionFrequency}
+							/>
+						</div>
+						<div>
+							<Label for={`savings-contribution-${pension.id}`}>Contribution amount (£)</Label>
+							<Input
+								id={`savings-contribution-${pension.id}`}
+								type="number"
+								min="0"
+								step="1"
+								bind:value={pension.contributionAmount}
+							/>
+						</div>
+						<div>
+							<Label for={`savings-end-${pension.id}`}>Age contributions will end</Label>
+							<Input
+								id={`savings-end-${pension.id}`}
+								type="number"
+								min="18"
+								max="120"
+								step="1"
+								bind:value={pension.endAge}
+							/>
+						</div>
+						<div>
+							<Label for={`savings-increase-${pension.id}`}>Annual contribution increase (%)</Label>
+							<Input
+								id={`savings-increase-${pension.id}`}
+								type="number"
+								min="-99.99"
+								max="100"
+								step="0.1"
+								bind:value={pension.contributionIncreaseRate}
+							/>
+						</div>
+						<div>
+							<Label for={`savings-return-${pension.id}`}>Expected annual return</Label>
+							<Select
+								id={`savings-return-${pension.id}`}
+								items={returnModes}
+								bind:value={pension.returnMode}
+							/>
+						</div>
+						{#if pension.returnMode === "custom"}
+							<div>
+								<Label for={`savings-custom-${pension.id}`}>Custom annual return (%)</Label>
+								<Input
+									id={`savings-custom-${pension.id}`}
+									type="number"
+									min="-100"
+									max="100"
+									step="0.1"
+									bind:value={pension.customReturnRate}
+								/>
+							</div>
+						{/if}
+						<div>
+							<Label for={`savings-fee-${pension.id}`}>Annual fee (% of balance)</Label>
+							<Input
+								id={`savings-fee-${pension.id}`}
+								type="number"
+								min="0"
+								max="100"
+								step="0.01"
+								bind:value={pension.annualFeeRate}
+							/>
+						</div>
+						<div>
+							<Label for={`savings-bonus-${pension.id}`}
+								>Additional bonus (% of contributions)</Label
+							>
+							<Input
+								id={`savings-bonus-${pension.id}`}
+								type="number"
+								min="0"
+								max="100"
+								step="0.1"
+								placeholder="e.g., 25% for LISA"
+								bind:value={pension.bonusRate}
+							/>
+						</div>
+					</div>
+					<p class="pension-note">
+						Contributions and any bonus arrive at the end of each period. Returns and fees compound
+						during the period. The bonus is illustrative; eligibility and annual limits are not
+						applied. Estimates exclude tax and inflation.
+					</p>
+					{@const savings = savingsResultFor(pension)}
+					<div class="pension-result" aria-live="polite">
+						{#if savings.result}
+							<strong
+								>Projected savings at age {draft.retirementAge}: {pounds.format(
+									savings.result.projectedBalance
+								)}</strong
+							>
+							<p>Future contributions: {pounds.format(savings.result.futureContributions)}</p>
+							<p>Additional bonus: {pounds.format(savings.result.futureBonus)}</p>
+							<p>
+								Future investment growth: {pounds.format(savings.result.futureInvestmentGrowth)}
+							</p>
+							<p>Future fees: {pounds.format(-savings.result.futureFeesPaid)}</p>
+						{:else}<p>{savings.error}</p>{/if}
+					</div>
 				{:else if pension.kind !== "unselected"}
 					<div class="pension-fields">
 						<div>
@@ -682,12 +824,11 @@
 							/>
 						</div>
 					</div>
-					{#if pension.kind === "personalSavings" || pension.kind === "propertyEquity"}
+					{#if pension.kind === "propertyEquity"}
 						<p class="pension-note">
 							This current value is recorded for planning toward retirement at age {draft.retirementAge ||
-								"—"}. No future change is estimated.
-							{#if pension.kind === "propertyEquity"}
-								Property equity is not treated as income until you choose how to release it.{/if}
+								"—"}. No future change is estimated. Property equity is not treated as income until
+							you choose how to release it.
 						</p>
 					{/if}
 				{/if}

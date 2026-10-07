@@ -1,4 +1,4 @@
-export const FORMAT_VERSION = 11;
+export const FORMAT_VERSION = 12;
 
 const simpleKinds = [
 	"pot",
@@ -38,6 +38,33 @@ const dcNumbers = [
 	"existingPot",
 	"customReturnRate"
 ];
+
+const savingsNumbers = [
+	"currentBalance",
+	"contributionAmount",
+	"endAge",
+	"contributionIncreaseRate",
+	"annualFeeRate",
+	"bonusRate",
+	"customReturnRate"
+];
+
+export function createPersonalSavings(id) {
+	return {
+		id,
+		kind: "personalSavings",
+		name: "",
+		currentBalance: "",
+		contributionFrequency: "yearly",
+		contributionAmount: "",
+		endAge: "",
+		contributionIncreaseRate: 2.5,
+		returnMode: "balanced",
+		customReturnRate: "",
+		annualFeeRate: "",
+		bonusRate: ""
+	};
+}
 
 export function createDefinedContribution(id) {
 	return {
@@ -146,6 +173,7 @@ export function fromDocument(document) {
 		version !== 8 &&
 		version !== 9 &&
 		version !== 10 &&
+		version !== 11 &&
 		version !== FORMAT_VERSION
 	) {
 		throw new Error("Unsupported pension draft format version");
@@ -173,6 +201,7 @@ export function fromDocument(document) {
 		const isDb = version >= 2 && pension.kind === "definedBenefit";
 		const isDc = version >= 7 && pension.kind === "definedContribution";
 		const isState = version >= 10 && pension.kind === "statePension";
+		const isSavings = version >= 12 && pension.kind === "personalSavings";
 		assertFields(
 			pension,
 			isDb
@@ -217,17 +246,19 @@ export function fromDocument(document) {
 							"earnings",
 							"returnMode"
 						]
-					: isState
-						? [
-								"id",
-								"kind",
-								"name",
-								"qualifyingYears",
-								"qualifyingAge",
-								...(version === FORMAT_VERSION ? ["annualIncreaseRate"] : []),
-								"legacyAmount"
-							]
-						: ["id", "kind", "name", "amount"],
+					: isSavings
+						? ["id", "kind", "name", ...savingsNumbers, "contributionFrequency", "returnMode"]
+						: isState
+							? [
+									"id",
+									"kind",
+									"name",
+									"qualifyingYears",
+									"qualifyingAge",
+									...(version >= 11 ? ["annualIncreaseRate"] : []),
+									"legacyAmount"
+								]
+							: ["id", "kind", "name", "amount"],
 			label
 		);
 		if (
@@ -244,6 +275,7 @@ export function fromDocument(document) {
 			!isDb &&
 			!isDc &&
 			!isState &&
+			!isSavings &&
 			!(version >= 3 ? simpleKinds : ["pot", "income"]).includes(pension.kind)
 		) {
 			throw new Error(`${label} has an unknown kind`);
@@ -319,11 +351,27 @@ export function fromDocument(document) {
 				qualifyingYears: documentNumber(pension.qualifyingYears, `${label} qualifying years`) ?? "",
 				qualifyingAge: documentNumber(pension.qualifyingAge, `${label} qualifying age`) ?? "",
 				annualIncreaseRate:
-					version === FORMAT_VERSION
+					version >= 11
 						? (documentNumber(pension.annualIncreaseRate, `${label} annual increase`) ?? "")
 						: 3.2,
 				legacyAmount: documentNumber(pension.legacyAmount, `${label} previous amount`) ?? ""
 			};
+		}
+		if (isSavings) {
+			if (!["yearly", "monthly", "weekly"].includes(pension.contributionFrequency))
+				throw new Error(`${label} has an unknown contribution frequency`);
+			if (!["cautious", "balanced", "optimistic", "custom"].includes(pension.returnMode))
+				throw new Error(`${label} has an unknown return mode`);
+			const restored = {
+				id: pension.id,
+				kind: pension.kind,
+				name: pension.name,
+				contributionFrequency: pension.contributionFrequency,
+				returnMode: pension.returnMode
+			};
+			for (const field of savingsNumbers)
+				restored[field] = documentNumber(pension[field], `${label} ${field}`) ?? "";
+			return restored;
 		}
 		if (pension.kind === "statePension") {
 			return {
@@ -337,6 +385,13 @@ export function fromDocument(document) {
 				...createDefinedContribution(pension.id),
 				name: pension.name,
 				existingPot: documentNumber(pension.amount, `${label} amount`) ?? ""
+			};
+		}
+		if (pension.kind === "personalSavings") {
+			return {
+				...createPersonalSavings(pension.id),
+				name: pension.name,
+				currentBalance: documentNumber(pension.amount, `${label} amount`) ?? ""
 			};
 		}
 		return {
@@ -380,6 +435,17 @@ export function toDocument(draft) {
 		formatVersion: FORMAT_VERSION,
 		currentAge: formNumber(draft.currentAge, "Current age"),
 		pensions: draft.pensions.map((pension) => {
+			if (pension.kind === "personalSavings") {
+				const entry = {
+					id: pension.id,
+					kind: pension.kind,
+					name: pension.name,
+					contributionFrequency: pension.contributionFrequency,
+					returnMode: pension.returnMode
+				};
+				for (const field of savingsNumbers) entry[field] = formNumber(pension[field], field);
+				return entry;
+			}
 			if (pension.kind === "statePension") {
 				return {
 					id: pension.id,
