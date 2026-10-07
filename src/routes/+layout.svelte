@@ -2,20 +2,13 @@
 	import { setContext } from "svelte";
 	import { page } from "$app/state";
 	import { resolve } from "$app/paths";
+	import { createDefaultDraft } from "$lib/pension-draft.js";
 	import "@onsvisual/svelte-components/css/main.css";
 	import "maplibre-gl/dist/maplibre-gl.css";
 	import "../app.css";
 
 	let { children } = $props();
-	const draft = $state({
-		pensions: [{ id: 1, kind: "pot", name: "", amount: "" }],
-		nextId: 2,
-		retirementAge: 67,
-		finalAge: 95,
-		annualIncome: "",
-		strategy: "steady",
-		withdrawalRate: 4
-	});
+	const draft = $state(createDefaultDraft());
 	setContext("pension-draft", draft);
 </script>
 
