@@ -283,6 +283,74 @@
 	padding-top: 28px;
 }
 
+.pension-retirement-summary h3 {
+	margin: 0;
+}
+
+.pension-resource-note {
+	margin: 8px 0 0;
+	font-size: 14px;
+	line-height: 1.5;
+}
+
+.pension-resource-groups {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 20px;
+	margin-top: 20px;
+}
+
+.pension-resource-group {
+	min-width: 0;
+}
+
+.pension-resource-group h4,
+.pension-resource-incomplete h4 {
+	font-size: 16px;
+	font-weight: 700;
+	margin: 0 0 8px;
+}
+
+.pension-resource-total {
+	display: block;
+	margin-bottom: 8px;
+}
+
+.pension-resource-list,
+.pension-resource-incomplete ul {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.pension-resource-list li {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 8px 0;
+	border-top: 1px solid rgb(0 0 0 / 12%);
+}
+
+.pension-resource-list li > span {
+	min-width: 0;
+}
+
+.pension-resource-list small {
+	display: block;
+	color: var(--muted);
+	font-size: 13px;
+}
+
+.pension-resource-incomplete {
+	margin-top: 18px;
+	padding-top: 14px;
+	border-top: 1px solid rgb(0 0 0 / 18%);
+}
+
+.pension-resource-incomplete li {
+	margin-top: 6px;
+}
+
 .pension-aside {
 	border-top: 3px solid var(--accent);
 	background: #fff;
@@ -308,6 +376,10 @@
 }
 
 @media (max-width: 760px) {
+	.pension-resource-groups {
+		grid-template-columns: 1fr;
+	}
+
 	.pension-header-inner {
 		align-items: flex-start;
 		flex-direction: column;

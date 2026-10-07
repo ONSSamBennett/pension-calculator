@@ -51,6 +51,7 @@ export function definedBenefitResult(pension, currentAge, asOfYear = new Date().
 	if (leaveAge < serviceStartAge) throw new Error("Leave age must not be before service start age");
 	const yearsUntilPayment = paymentAge - now;
 	const yearsUntilLeave = Math.max(0, leaveAge - now);
+	const yearsSinceExit = Math.max(0, paymentAge - Math.max(now, leaveAge));
 	const futureServiceStart = Math.max(0, serviceStartAge - now);
 	const futureServiceYears = Math.max(0, yearsUntilLeave - futureServiceStart);
 	const growth = number(pension.payGrowthRate, "annual pay growth", -100) / 100;
@@ -116,7 +117,9 @@ export function definedBenefitResult(pension, currentAge, asOfYear = new Date().
 		}
 	}
 
-	const annualIncome = pastAccrual + futureAccrual;
+	const annualIncome =
+		(pastAccrual + futureAccrual) *
+		(pension.scheme === "finalSalary" ? (1 + growth) ** yearsSinceExit : 1);
 	if (!Number.isFinite(annualIncome))
 		throw new Error("These assumptions produce an invalid estimate");
 	return { annualIncome, valuationAge: paymentAge, estimated: true };

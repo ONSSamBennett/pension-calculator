@@ -407,9 +407,11 @@
 								/>
 							</div>
 						{/if}
-						{#if pension.leaveAge !== "" && Number(pension.leaveAge) > Number(draft.currentAge)}
+						{#if pension.leaveAge !== "" && (Number(pension.leaveAge) > Number(draft.currentAge) || (pension.scheme === "finalSalary" && Number(pension.normalAge) > Math.max(Number(draft.currentAge), Number(pension.leaveAge))))}
 							<div>
-								<Label for={`growth-${pension.id}`}>Annual pay growth (%)</Label>
+								<Label for={`growth-${pension.id}`}
+									>Annual pay growth and final-salary uprating (%)</Label
+								>
 								<Input
 									id={`growth-${pension.id}`}
 									type="number"
@@ -482,8 +484,9 @@
 					{/if}
 					<p class="pension-note">
 						New accrual and final-salary pay growth stop when you leave this scheme. CARE
-						revaluation continues to normal scheme age, or later leave age. Payment timing and
-						scheme adjustments will be handled in withdrawals.
+						revaluation continues to normal scheme age, or later leave age. Previously accrued
+						final-salary benefits continue to be uprated at the pay growth rate until the valuation
+						age. Payment timing and scheme adjustments will be handled in withdrawals.
 					</p>
 					{#if hasCompletedService(pension) && pension.accrualMethod === "known"}
 						<p class="pension-note">

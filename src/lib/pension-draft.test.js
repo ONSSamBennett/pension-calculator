@@ -457,6 +457,7 @@ test("old defined-contribution amounts migrate to a known existing pot", () => {
 		assert.deepEqual(restored.pensions[1], {
 			...createDefinedContribution(7),
 			name: "Old scheme",
+			pastPotMethod: "known",
 			existingPot: 0
 		});
 		assert.equal(restored.nextId, 9);
@@ -467,11 +468,14 @@ test("old defined-contribution amounts migrate to a known existing pot", () => {
 
 test("DC defaults, inactive custom return, and yearly pay survive JSON round trips", () => {
 	const draft = createDefaultDraft();
+	assert.equal(createDefinedBenefit(3).payGrowthRate, 2.5);
 	const dc = createDefinedContribution(2);
+	assert.equal(dc.payGrowthRate, 2.5);
 	assert.equal(dc.employeeRate, 5);
 	assert.equal(dc.employerRate, 3);
 	assert.equal(dc.annualFeeRate, 0.3);
 	assert.equal(dc.returnMode, "balanced");
+	assert.equal(dc.pastPotMethod, "estimate");
 	dc.startAge = 38;
 	dc.endAge = 44;
 	dc.pastPotMethod = "known";
@@ -533,7 +537,7 @@ test("version-seven contribution years are kept without guessing ages", () => {
 
 test("DC return presets and custom percentage compound annually", () => {
 	const dc = createDefinedContribution(1);
-	Object.assign(dc, { startAge: 40, endAge: 41, pensionablePay: 100000 });
+	Object.assign(dc, { startAge: 40, endAge: 41, pensionablePay: 100000, payGrowthRate: 0 });
 	dc.annualFeeRate = 0;
 	assert.deepEqual(definedContributionResult(dc, 40, 42, 2026), {
 		existingPot: 0,
@@ -562,7 +566,9 @@ test("DC entered pot does not reapply past returns", () => {
 	Object.assign(dc, {
 		startAge: 38,
 		endAge: 41,
+		pastPotMethod: "known",
 		pensionablePay: 100000,
+		payGrowthRate: 0,
 		annualFeeRate: 0,
 		existingPot: 10000,
 		earnings: [{ year: 2024, pay: 1 }]
@@ -580,6 +586,7 @@ test("DC estimated and year-by-year past pots match with constant pay", () => {
 		startAge: 38,
 		endAge: 39,
 		pensionablePay: 100000,
+		payGrowthRate: 0,
 		annualFeeRate: 0,
 		pastPotMethod: "estimate"
 	});
@@ -616,7 +623,7 @@ test("DC future-only jobs begin contributions at the chosen calendar year", () =
 
 test("DC pot keeps earning returns after contributions stop until retirement", () => {
 	const dc = createDefinedContribution(1);
-	Object.assign(dc, { startAge: 40, endAge: 41, pensionablePay: 100000 });
+	Object.assign(dc, { startAge: 40, endAge: 41, pensionablePay: 100000, payGrowthRate: 0 });
 	dc.annualFeeRate = 0;
 	const result = definedContributionResult(dc, 40, 44, 2026);
 	assert.equal(result.existingPot, 0);
@@ -627,7 +634,7 @@ test("DC pot keeps earning returns after contributions stop until retirement", (
 
 test("DC retirement snapshot excludes contributions in or after the retirement year", () => {
 	const dc = createDefinedContribution(1);
-	Object.assign(dc, { startAge: 40, endAge: 50, pensionablePay: 100000 });
+	Object.assign(dc, { startAge: 40, endAge: 50, pensionablePay: 100000, payGrowthRate: 0 });
 	dc.annualFeeRate = 0;
 	assert.equal(definedContributionResult(dc, 40, 40, 2026).projectedPot, 0);
 	const result = definedContributionResult(dc, 40, 42, 2026);
@@ -638,7 +645,7 @@ test("DC retirement snapshot excludes contributions in or after the retirement y
 
 test("DC default 0.3% fee applies to invested pot before year-end contributions", () => {
 	const dc = createDefinedContribution(1);
-	Object.assign(dc, { startAge: 40, endAge: 41, pensionablePay: 100000 });
+	Object.assign(dc, { startAge: 40, endAge: 41, pensionablePay: 100000, payGrowthRate: 0 });
 	assert.equal(definedContributionResult(dc, 40, 41, 2026).projectedPot, 8000);
 	const result = definedContributionResult(dc, 40, 42, 2026);
 	assert.ok(Math.abs(result.projectedPot - 16454.56) < 0.01);
@@ -664,6 +671,7 @@ test("DC estimated past pot includes fees but entered current pot is not charged
 		startAge: 38,
 		endAge: 39,
 		pensionablePay: 100000,
+		payGrowthRate: 0,
 		pastPotMethod: "estimate"
 	});
 	const estimated = definedContributionResult(dc, 40, 40, 2026);
@@ -681,7 +689,8 @@ test("version-five files derive service from ages instead of a saved year count"
 		serviceStartAge: 20,
 		leaveAge: 60,
 		pensionablePay: 60000,
-		accrualDenominator: 60
+		accrualDenominator: 60,
+		payGrowthRate: 0
 	});
 	draft.pensions.push(db);
 	const current = toDocument(draft);
@@ -704,6 +713,7 @@ test("future DB service ignores inactive past-accrual inputs until work begins",
 		leaveAge: 55,
 		pensionablePay: 60000,
 		accrualDenominator: 60,
+		payGrowthRate: 0,
 		accrualMethod: "known",
 		accruedAnnualPension: 9000,
 		earnings: [{ year: 2020, pay: 10000 }]
@@ -740,6 +750,7 @@ test("final salary estimates service and pay growth without payment-time adjustm
 		serviceStartAge: 20,
 		leaveAge: 65,
 		accrualDenominator: 60,
+		payGrowthRate: 0,
 		lumpSum: 10000
 	});
 	assert.deepEqual(definedBenefitResult(db, 40, 2026), {
@@ -768,6 +779,7 @@ test("CARE quick and yearly estimates match with equal past earnings", () => {
 		serviceStartAge: 38,
 		leaveAge: 42,
 		accrualDenominator: 54,
+		payGrowthRate: 0,
 		revaluationRate: 0
 	});
 	const quick = definedBenefitResult(db, 40, 2026);
@@ -792,6 +804,7 @@ test("final salary year-by-year history uses the latest pay and requires complet
 		serviceStartAge: 38,
 		leaveAge: 42,
 		accrualDenominator: 60,
+		payGrowthRate: 0,
 		earnings: [
 			{ year: 2024, pay: 30000 },
 			{ year: 2025, pay: 52000 }
@@ -812,7 +825,8 @@ test("known accrued pension replaces past-service estimate and adds only future 
 		pensionablePay: 60000,
 		serviceStartAge: 20,
 		leaveAge: 65,
-		accrualDenominator: 60
+		accrualDenominator: 60,
+		payGrowthRate: 0
 	});
 	assert.equal(definedBenefitResult(db, 40, 2026).annualIncome, 40000);
 	db.startAge = 40;
@@ -834,6 +848,7 @@ test("known CARE accrual revalues to normal age before adding future accrual", (
 		serviceStartAge: 38,
 		leaveAge: 42,
 		accrualDenominator: 54,
+		payGrowthRate: 0,
 		startAge: 42,
 		revaluationRate: 2
 	});
@@ -841,7 +856,7 @@ test("known CARE accrual revalues to normal age before adding future accrual", (
 	assert.ok(Math.abs(definedBenefitResult(db, 40, 2026).annualIncome - expected) < 0.01);
 });
 
-test("final-salary accrual stops at leave regardless of saved payment age", () => {
+test("final-salary accrual stops at leave and past benefits uprate to payment age", () => {
 	const db = createDefinedBenefit(1);
 	Object.assign(db, {
 		serviceStartAge: 20,
@@ -851,12 +866,29 @@ test("final-salary accrual stops at leave regardless of saved payment age", () =
 		payGrowthRate: 2,
 		accrualDenominator: 60
 	});
-	const expected = (60000 * 1.02 ** 20 * 40) / 60;
+	const expected = (60000 * 1.02 ** 20 * 40 * 1.02 ** 5) / 60;
 	assert.ok(Math.abs(definedBenefitResult(db, 40, 2026).annualIncome - expected) < 0.01);
 	db.startAge = 70;
 	assert.ok(Math.abs(definedBenefitResult(db, 40, 2026).annualIncome - expected) < 0.01);
 	db.leaveAge = 71;
 	assert.equal(definedBenefitResult(db, 40, 2026).valuationAge, 71);
+});
+
+test("deferred final-salary accrual uses pay growth after leaving the scheme", () => {
+	const db = createDefinedBenefit(1);
+	Object.assign(db, {
+		serviceStartAge: 20,
+		leaveAge: 35,
+		normalAge: 65,
+		pensionablePay: 50000,
+		accrualDenominator: 60,
+		payGrowthRate: 3
+	});
+	const expected = ((50000 * 15) / 60) * 1.03 ** 25;
+	assert.ok(Math.abs(definedBenefitResult(db, 40, 2026).annualIncome - expected) < 0.01);
+	db.accrualMethod = "known";
+	db.accruedAnnualPension = 12500;
+	assert.ok(Math.abs(definedBenefitResult(db, 40, 2026).annualIncome - expected) < 0.01);
 });
 
 test("CARE accrual stops at leave but revalues through deferred payment", () => {
@@ -868,13 +900,14 @@ test("CARE accrual stops at leave but revalues through deferred payment", () => 
 		startAge: 47,
 		pensionablePay: 54000,
 		accrualDenominator: 54,
+		payGrowthRate: 0,
 		revaluationRate: 2
 	});
 	const expected = 1000 * (1.02 ** 26 + 1.02 ** 27 + 1.02 ** 24 + 1.02 ** 23);
 	assert.ok(Math.abs(definedBenefitResult(db, 40, 2026).annualIncome - expected) < 0.01);
 });
 
-test("an already-departed scheme earns no new service or final-salary growth", () => {
+test("an already-departed scheme earns no new service but uprates accrued benefits", () => {
 	const db = createDefinedBenefit(1);
 	Object.assign(db, {
 		serviceStartAge: 20,
@@ -884,9 +917,13 @@ test("an already-departed scheme earns no new service or final-salary growth", (
 		accrualDenominator: 60,
 		payGrowthRate: 5
 	});
-	assert.equal(definedBenefitResult(db, 40, 2026).annualIncome, 12500);
+	const uprating = 1.05 ** 25;
+	assert.ok(Math.abs(definedBenefitResult(db, 40, 2026).annualIncome - 12500 * uprating) < 0.01);
 	db.leaveAge = 34;
-	assert.ok(Math.abs(definedBenefitResult(db, 40, 2026).annualIncome - (50000 * 14) / 60) < 0.01);
+	assert.ok(
+		Math.abs(definedBenefitResult(db, 40, 2026).annualIncome - ((50000 * 14) / 60) * uprating) <
+			0.01
+	);
 });
 
 test("switching methods retains inactive inputs without including them in known accrual", () => {
@@ -922,6 +959,7 @@ test("legacy in-payment fields remain saved but do not affect the scheme estimat
 	db.leaveAge = 40;
 	db.pensionablePay = 60000;
 	db.accrualDenominator = 60;
+	db.payGrowthRate = 0;
 	db.startAge = 40;
 	db.adjustmentRate = -20;
 	db.lumpSum = 10000;

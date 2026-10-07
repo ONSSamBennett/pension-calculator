@@ -95,11 +95,11 @@ export function createDefinedContribution(id) {
 		startYear: "",
 		endYear: "",
 		pensionablePay: "",
-		payGrowthRate: 0,
+		payGrowthRate: 2.5,
 		employeeRate: 5,
 		employerRate: 3,
 		annualFeeRate: 0.3,
-		pastPotMethod: "known",
+		pastPotMethod: "estimate",
 		existingPot: "",
 		earnings: [],
 		returnMode: "balanced",
@@ -135,7 +135,7 @@ export function createDefinedBenefit(id) {
 		serviceStartAge: "",
 		leaveAge: "",
 		accrualDenominator: "",
-		payGrowthRate: 0,
+		payGrowthRate: 2.5,
 		adjustmentRate: 0,
 		lumpSum: "",
 		revaluationRate: 0,
@@ -414,6 +414,7 @@ export function fromDocument(document) {
 			return {
 				...createDefinedContribution(pension.id),
 				name: pension.name,
+				pastPotMethod: "known",
 				existingPot: documentNumber(pension.amount, `${label} amount`) ?? ""
 			};
 		}
