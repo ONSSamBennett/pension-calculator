@@ -5,6 +5,7 @@ import {
 	createDefaultDraft,
 	createDefinedBenefit,
 	createDefinedContribution,
+	createPropertyEquity,
 	createPersonalSavings,
 	createStatePension,
 	fromDocument,
@@ -14,11 +15,12 @@ import { definedBenefitResult } from "./defined-benefit.js";
 import { definedContributionResult } from "./defined-contribution.js";
 import { projectedStatePensionAnnual, statePensionAnnual } from "./state-pension.js";
 import { personalSavingsResult } from "./personal-savings.js";
+import { propertyEquityResult } from "./property-equity.js";
 
 test("default draft round-trips without turning blank fields into zero", () => {
 	const initial = createDefaultDraft();
 	const document = JSON.parse(JSON.stringify(toDocument(initial)));
-	assert.equal(document.formatVersion, 12);
+	assert.equal(document.formatVersion, 13);
 	assert.equal(document.currentAge, 40);
 	assert.deepEqual(document.pensions[0], {
 		id: 1,
@@ -167,7 +169,7 @@ test("invalid documents are rejected without changing the current draft", () => 
 	draft.pensions.push({ id: 2, kind: "pot", name: "", amount: "" });
 	const valid = toDocument(draft);
 	const invalid = [
-		{ ...valid, formatVersion: 13 },
+		{ ...valid, formatVersion: 14 },
 		{ ...valid, currentAge: 17 },
 		{ ...valid, currentAge: 42.5 },
 		{
@@ -278,7 +280,7 @@ test("an unselected source and each new type survive JSON round trips", () => {
 		{ id: 2, kind: "unselected", name: "", amount: "" },
 		{ ...createDefinedContribution(3), name: "Workplace", existingPot: 150000 },
 		{ ...createPersonalSavings(4), name: "ISA", currentBalance: 25000 },
-		{ id: 5, kind: "propertyEquity", name: "Home", amount: 100000 }
+		{ ...createPropertyEquity(5), name: "Home", currentEquity: 100000 }
 	];
 	const document = JSON.parse(JSON.stringify(toDocument(draft)));
 	assert.equal(document.pensions[1].amount, null);
@@ -379,6 +381,67 @@ test("savings contribution frequency, annual increase, return and fees change pr
 	savings.endAge = "";
 	assert.throws(() => personalSavingsResult(savings, 40, 42), /age when contributions end/);
 	assert.throws(() => personalSavingsResult(savings, 40, 39), /target retirement age/);
+});
+
+test("legacy property equity migrates and version-thirteen fields round-trip", () => {
+	const document = toDocument(createDefaultDraft());
+	for (const amount of [100000, 0, null]) {
+		const restored = fromDocument({
+			...document,
+			formatVersion: 12,
+			pensions: [document.pensions[0], { id: 4, kind: "propertyEquity", name: "Home", amount }]
+		});
+		assert.deepEqual(restored.pensions[1], {
+			...createPropertyEquity(4),
+			name: "Home",
+			currentEquity: amount ?? ""
+		});
+		assert.equal(toDocument(restored).pensions[1].currentEquity, amount);
+	}
+	const draft = createDefaultDraft();
+	const property = createPropertyEquity(2);
+	Object.assign(property, {
+		currentEquity: 150000,
+		remainingMortgage: 80000,
+		monthlyEquityPayment: 750,
+		annualHousePriceIncreaseRate: 2.5
+	});
+	draft.pensions.push(property);
+	const saved = JSON.parse(JSON.stringify(toDocument(draft)));
+	assert.deepEqual(fromDocument(saved).pensions[1], property);
+	for (const source of [
+		{ ...saved.pensions[1], unexpected: true },
+		{ ...saved.pensions[1], remainingMortgage: Infinity }
+	]) {
+		assert.throws(() => applyDocument(draft, { ...saved, pensions: [source] }));
+		assert.deepEqual(draft.pensions[1], property);
+	}
+});
+
+test("property equity grows monthly and pays down mortgage until payoff or retirement", () => {
+	const property = createPropertyEquity(2);
+	Object.assign(property, {
+		currentEquity: 100000,
+		remainingMortgage: 24000,
+		monthlyEquityPayment: 1000
+	});
+	const result = propertyEquityResult(property, 40, 42);
+	assert.equal(result.mortgagePaid, 24000);
+	assert.equal(result.remainingMortgage, 0);
+	assert.ok(Math.abs(result.propertyValue - 124000 * 1.02 ** 2) < 0.01);
+	assert.equal(result.estimatedEquity, result.propertyValue);
+
+	property.remainingMortgage = 50000;
+	property.monthlyEquityPayment = 500;
+	const partial = propertyEquityResult(property, 40, 42);
+	assert.equal(partial.mortgagePaid, 12000);
+	assert.equal(partial.remainingMortgage, 38000);
+	assert.ok(Math.abs(partial.estimatedEquity - (150000 * 1.02 ** 2 - 38000)) < 0.01);
+	assert.throws(() => propertyEquityResult(property, 40, 39), /target retirement age/);
+	property.monthlyEquityPayment = "";
+	assert.throws(() => propertyEquityResult(property, 40, 42), /monthly mortgage payment/);
+	property.remainingMortgage = "";
+	assert.equal(propertyEquityResult(property, 40, 42).remainingMortgage, 0);
 });
 
 test("old defined-contribution amounts migrate to a known existing pot", () => {

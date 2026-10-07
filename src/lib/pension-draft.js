@@ -1,4 +1,4 @@
-export const FORMAT_VERSION = 12;
+export const FORMAT_VERSION = 13;
 
 const simpleKinds = [
 	"pot",
@@ -48,6 +48,25 @@ const savingsNumbers = [
 	"bonusRate",
 	"customReturnRate"
 ];
+
+const propertyEquityNumbers = [
+	"currentEquity",
+	"annualHousePriceIncreaseRate",
+	"remainingMortgage",
+	"monthlyEquityPayment"
+];
+
+export function createPropertyEquity(id) {
+	return {
+		id,
+		kind: "propertyEquity",
+		name: "",
+		currentEquity: "",
+		annualHousePriceIncreaseRate: 2,
+		remainingMortgage: "",
+		monthlyEquityPayment: ""
+	};
+}
 
 export function createPersonalSavings(id) {
 	return {
@@ -174,6 +193,7 @@ export function fromDocument(document) {
 		version !== 9 &&
 		version !== 10 &&
 		version !== 11 &&
+		version !== 12 &&
 		version !== FORMAT_VERSION
 	) {
 		throw new Error("Unsupported pension draft format version");
@@ -202,6 +222,7 @@ export function fromDocument(document) {
 		const isDc = version >= 7 && pension.kind === "definedContribution";
 		const isState = version >= 10 && pension.kind === "statePension";
 		const isSavings = version >= 12 && pension.kind === "personalSavings";
+		const isPropertyEquity = version >= 13 && pension.kind === "propertyEquity";
 		assertFields(
 			pension,
 			isDb
@@ -248,17 +269,19 @@ export function fromDocument(document) {
 						]
 					: isSavings
 						? ["id", "kind", "name", ...savingsNumbers, "contributionFrequency", "returnMode"]
-						: isState
-							? [
-									"id",
-									"kind",
-									"name",
-									"qualifyingYears",
-									"qualifyingAge",
-									...(version >= 11 ? ["annualIncreaseRate"] : []),
-									"legacyAmount"
-								]
-							: ["id", "kind", "name", "amount"],
+						: isPropertyEquity
+							? ["id", "kind", "name", ...propertyEquityNumbers]
+							: isState
+								? [
+										"id",
+										"kind",
+										"name",
+										"qualifyingYears",
+										"qualifyingAge",
+										...(version >= 11 ? ["annualIncreaseRate"] : []),
+										"legacyAmount"
+									]
+								: ["id", "kind", "name", "amount"],
 			label
 		);
 		if (
@@ -276,6 +299,7 @@ export function fromDocument(document) {
 			!isDc &&
 			!isState &&
 			!isSavings &&
+			!isPropertyEquity &&
 			!(version >= 3 ? simpleKinds : ["pot", "income"]).includes(pension.kind)
 		) {
 			throw new Error(`${label} has an unknown kind`);
@@ -373,6 +397,12 @@ export function fromDocument(document) {
 				restored[field] = documentNumber(pension[field], `${label} ${field}`) ?? "";
 			return restored;
 		}
+		if (isPropertyEquity) {
+			const restored = { id: pension.id, kind: pension.kind, name: pension.name };
+			for (const field of propertyEquityNumbers)
+				restored[field] = documentNumber(pension[field], `${label} ${field}`) ?? "";
+			return restored;
+		}
 		if (pension.kind === "statePension") {
 			return {
 				...createStatePension(pension.id),
@@ -392,6 +422,13 @@ export function fromDocument(document) {
 				...createPersonalSavings(pension.id),
 				name: pension.name,
 				currentBalance: documentNumber(pension.amount, `${label} amount`) ?? ""
+			};
+		}
+		if (pension.kind === "propertyEquity") {
+			return {
+				...createPropertyEquity(pension.id),
+				name: pension.name,
+				currentEquity: documentNumber(pension.amount, `${label} amount`) ?? ""
 			};
 		}
 		return {
@@ -435,6 +472,11 @@ export function toDocument(draft) {
 		formatVersion: FORMAT_VERSION,
 		currentAge: formNumber(draft.currentAge, "Current age"),
 		pensions: draft.pensions.map((pension) => {
+			if (pension.kind === "propertyEquity") {
+				const entry = { id: pension.id, kind: pension.kind, name: pension.name };
+				for (const field of propertyEquityNumbers) entry[field] = formNumber(pension[field], field);
+				return entry;
+			}
 			if (pension.kind === "personalSavings") {
 				const entry = {
 					id: pension.id,

@@ -5,12 +5,14 @@
 	import {
 		createDefinedBenefit,
 		createDefinedContribution,
+		createPropertyEquity,
 		createPersonalSavings
 	} from "$lib/pension-draft.js";
 	import { definedBenefitResult } from "$lib/defined-benefit.js";
 	import { definedContributionResult } from "$lib/defined-contribution.js";
 	import { projectedStatePensionAnnual, statePensionAnnual } from "$lib/state-pension.js";
 	import { personalSavingsResult } from "$lib/personal-savings.js";
+	import { propertyEquityResult } from "$lib/property-equity.js";
 
 	const draft = getContext("pension-draft");
 	const kinds = [
@@ -24,12 +26,10 @@
 		{ name: "Projected annual pension (previous entry)", value: "income" }
 	];
 	const amounts = {
-		propertyEquity: "Estimated available property equity (£)",
 		pot: "Current pot value (£)",
 		income: "Annual income (£)"
 	};
 	const names = {
-		propertyEquity: "Property name",
 		pot: "Name",
 		income: "Name"
 	};
@@ -88,7 +88,9 @@
 					? { ...createDefinedContribution(pension.id), name: pension.name }
 					: kind === "personalSavings"
 						? { ...createPersonalSavings(pension.id), name: pension.name }
-						: { id: pension.id, kind, name: pension.name, amount: "" };
+						: kind === "propertyEquity"
+							? { ...createPropertyEquity(pension.id), name: pension.name }
+							: { id: pension.id, kind, name: pension.name, amount: "" };
 	}
 
 	function resultFor(pension) {
@@ -128,6 +130,14 @@
 	function savingsResultFor(pension) {
 		try {
 			return { result: personalSavingsResult(pension, draft.currentAge, draft.retirementAge) };
+		} catch (error) {
+			return { error: error.message };
+		}
+	}
+
+	function propertyEquityResultFor(pension) {
+		try {
+			return { result: propertyEquityResult(pension, draft.currentAge, draft.retirementAge) };
 		} catch (error) {
 			return { error: error.message };
 		}
@@ -197,14 +207,16 @@
 				<div class="pension-entry-heading">
 					{#if pension.kind === "statePension"}
 						<h3>State Pension</h3>
-					{:else if pension.kind === "definedBenefit" || pension.kind === "definedContribution" || pension.kind === "personalSavings"}
+					{:else if pension.kind === "definedBenefit" || pension.kind === "definedContribution" || pension.kind === "personalSavings" || pension.kind === "propertyEquity"}
 						<h3 class="pension-entry-name">
 							<label for={`name-${pension.id}`}
 								>{pension.kind === "definedBenefit"
 									? "Scheme name"
 									: pension.kind === "definedContribution"
 										? "Pension name"
-										: "Savings name"}</label
+										: pension.kind === "personalSavings"
+											? "Savings name"
+											: "Property name"}</label
 							>
 							<input
 								id={`name-${pension.id}`}
@@ -686,6 +698,68 @@
 							</p>
 							<p>Future fees: {pounds.format(-projection.result.futureFeesPaid)}</p>
 						{:else}<p>{projection.error}</p>{/if}
+					</div>
+				{:else if pension.kind === "propertyEquity"}
+					<div class="pension-fields">
+						<div>
+							<Label for={`property-equity-${pension.id}`}>Current equity (£)</Label>
+							<Input
+								id={`property-equity-${pension.id}`}
+								type="number"
+								min="0"
+								step="1"
+								bind:value={pension.currentEquity}
+							/>
+						</div>
+						<div>
+							<Label for={`property-growth-${pension.id}`}>Annual house price increase (%)</Label>
+							<Input
+								id={`property-growth-${pension.id}`}
+								type="number"
+								min="-99.99"
+								max="100"
+								step="0.1"
+								bind:value={pension.annualHousePriceIncreaseRate}
+							/>
+						</div>
+						<div>
+							<Label for={`property-mortgage-${pension.id}`}>Remaining mortgage (£)</Label>
+							<Input
+								id={`property-mortgage-${pension.id}`}
+								type="number"
+								min="0"
+								step="1"
+								bind:value={pension.remainingMortgage}
+							/>
+						</div>
+						{#if pension.remainingMortgage !== ""}
+							<div>
+								<Label for={`property-payment-${pension.id}`}
+									>Monthly mortgage equity payment (£)</Label
+								>
+								<Input
+									id={`property-payment-${pension.id}`}
+									type="number"
+									min="0"
+									step="1"
+									bind:value={pension.monthlyEquityPayment}
+								/>
+							</div>
+						{/if}
+					</div>
+					<p class="pension-note">
+						Mortgage payments reduce the balance monthly until it is repaid or you reach retirement.
+						Mortgage interest is not included.
+					</p>
+					{@const property = propertyEquityResultFor(pension)}
+					<div class="pension-result" aria-live="polite">
+						{#if property.result}
+							<strong
+								>Estimated property equity at age {draft.retirementAge}: {pounds.format(
+									property.result.estimatedEquity
+								)}</strong
+							>
+						{:else}<p>{property.error}</p>{/if}
 					</div>
 				{:else if pension.kind === "personalSavings"}
 					<div class="pension-fields">
