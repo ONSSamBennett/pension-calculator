@@ -12,6 +12,7 @@ Keep this section current as the pensions calculator takes shape. For each meani
 
 - **2026-10-07 - UI and chart dependencies:** Added `flowbite-svelte` and `echarts` to `devDependencies` and ran `npm install`. They are available for the planned calculator UI and charts. Kept `@onsvisual/svelte-components` and `@onsvisual/svelte-charts` in place because existing templates still use them; no components or charts have been migrated yet.
 - **2026-10-07 - Deployment:** Removed the GitHub Pages workflow because commits were triggering failed deployment runs during calculator development. Local `npm run build` and `npm run build:preview` remain available; deployment is manual until explicitly configured again.
+- **2026-10-07 - Calculator page shells:** Made `/` the pensions input page and added `/withdrawals/` for drawdown assumptions. Added Tailwind 4 and its Vite plugin to style Flowbite Svelte components. The shared layout supplies navigation and an in-memory draft so entries survive page changes without persisting financial data. Pension sources can be added or removed and marked as pots or projected annual income; withdrawals collect ages, an income target and a fixed-amount or percentage approach. No pension projections, tax logic, charts, or saved data are implemented yet; avoid presenting an estimate until the calculation model is agreed.
 
 ## Commands
 
@@ -52,7 +53,7 @@ There is no test suite, so check UI changes by running the dev server and using 
 - **Prerendering** (`src/routes/+layout.js`): prerendering is on unless `PUBLIC_APP_ENV=preview`, in which case the preview build is an SPA with a `404.html` fallback. `trailingSlash = 'always'`.
 - **`scripts/js-fix.js`** runs after `npm run build` only. It prepends `//js\n` to every JS file in `build/_app/` to avoid MIME-type errors on the ONS hosting. `build:preview` skips it.
 - **`vite.config.js`** drops `console` and `debugger` in builds, so `console.log` output only appears in dev.
-- **Global styles**: `src/routes/+layout.svelte` imports the svelte-components CSS, the maplibre-gl CSS and `src/app.css`.
+- **Global styles**: `src/routes/+layout.svelte` imports the svelte-components CSS, the maplibre-gl CSS and `src/app.css`. Tailwind 4 compiles Flowbite styles from `src/app.css` via the Vite plugin; calculator-specific selectors are prefixed with `pension-` to avoid styling the starter templates.
 - **`src/lib/config.js`** holds the analytics config (GTM ID and `analyticsProps` placeholders to fill in per product), the colour themes, and demo data (regions, palettes, units).
 - **Svelte 5** is installed, but the templates mix syntax. `feature` and `map` use runes (`$state`, `$props`). Match the style of the file you are editing. Components from `@onsvisual/svelte-components` and `@onsvisual/svelte-maps` still dispatch legacy events, so use `on:change`/`on:click` on them, or `bind:` their props.
 - **`Section` vs `Container`** (svelte-components): `Section` renders its own `Container`, which has `marginBottom` set to `true` and `width` set to `"narrow"` (8 of 12 columns at large widths). Don't nest a `Container` inside a `Section`. Use one or the other, and set the margins and width on whichever you use.
