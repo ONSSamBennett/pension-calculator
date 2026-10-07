@@ -30,22 +30,7 @@ When you're ready to publish the app (either for preview or for production), you
 npm run build
 ```
 
-### Automatic Deployment
-
-This repository includes a GitHub Actions workflow (`.github/workflows/deploy.yml`) that automatically builds and deploys to GitHub Pages on every push to `main`.
-
-To enable automatic deployment:
-
-1. Go to **Settings → Pages**
-2. Set **Source** to "Deploy from a branch"
-3. Set **Branch** to `gh-pages` and **Folder** to `/ (root)`
-4. Save
-
-The workflow will:
-
-- Build the app using `npm run build:preview`
-- Deploy to GitHub Pages automatically
-- Be accessible at `https://onsdigital.github.io/your-repo-name/`
+There is no automatic GitHub Pages deployment. Build locally and publish the output manually when needed.
 
 ### Configuration
 

@@ -11,6 +11,7 @@ A collection of SvelteKit starter page templates for ONS (Office for National St
 Keep this section current as the pensions calculator takes shape. For each meaningful change, record what changed and why; distinguish intended choices from work already implemented.
 
 - **2026-10-07 - UI and chart dependencies:** Added `flowbite-svelte` and `echarts` to `devDependencies` and ran `npm install`. They are available for the planned calculator UI and charts. Kept `@onsvisual/svelte-components` and `@onsvisual/svelte-charts` in place because existing templates still use them; no components or charts have been migrated yet.
+- **2026-10-07 - Deployment:** Removed the GitHub Pages workflow because commits were triggering failed deployment runs during calculator development. Local `npm run build` and `npm run build:preview` remain available; deployment is manual until explicitly configured again.
 
 ## Commands
 
@@ -74,4 +75,4 @@ This route is self-contained: its components, config and helpers all live in the
 
 ## Deployment
 
-`.github/workflows/deploy.yml` runs `npm run build:preview` on pushes and PRs to `main`. On a push to `main`, it deploys `build/` to the `gh-pages` branch. Its actions are pinned to commit SHAs, so keep that pinning when you edit the workflow.
+No GitHub Actions deployment workflow is configured. Builds can still be produced locally using `npm run build` or `npm run build:preview`.
