@@ -990,6 +990,9 @@
 		{:else}
 			<p class="pension-empty">No pension sources added yet.</p>
 		{/each}
+		<div class="pension-add-bottom">
+			<Button color="green" onclick={addPension}>Add pension</Button>
+		</div>
 	</section>
 
 	<aside class="pension-aside">
