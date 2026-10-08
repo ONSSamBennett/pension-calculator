@@ -15,6 +15,7 @@
 	import { propertyEquityResult } from "$lib/property-equity.js";
 	import { realTermsFlowTotal, realTermsResidualGrowth, realTermsValue } from "$lib/real-terms.js";
 	import PriceDisplaySwitch from "$lib/PriceDisplaySwitch.svelte";
+	import DraftFileActions from "$lib/DraftFileActions.svelte";
 
 	const draft = getContext("pension-draft");
 	const priceDisplay = getContext("price-display");
@@ -190,6 +191,7 @@
 	<p class="pension-step">01 / 02 &nbsp; PENSIONS</p>
 	<h1>Your pensions</h1>
 	<p>Add your pension sources, savings and other assets for retirement.</p>
+	<DraftFileActions />
 </div>
 
 <div class="pension-page-price-display">

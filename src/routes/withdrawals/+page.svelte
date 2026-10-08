@@ -12,6 +12,7 @@
 	import { isValidPlanAge, retirementIncomeChartData } from "$lib/retirement-income-chart.js";
 	import AnnualIncomeChart from "$lib/AnnualIncomeChart.svelte";
 	import PriceDisplaySwitch from "$lib/PriceDisplaySwitch.svelte";
+	import DraftFileActions from "$lib/DraftFileActions.svelte";
 
 	const draft = getContext("pension-draft");
 	const priceDisplay = getContext("price-display");
@@ -219,6 +220,7 @@
 	<p class="pension-step">02 / 02 &nbsp; WITHDRAWALS</p>
 	<h1>Plan your withdrawals</h1>
 	<p>Set your retirement time horizon and annual income target.</p>
+	<DraftFileActions />
 </div>
 
 <div class="pension-page-price-display">
