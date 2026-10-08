@@ -13,7 +13,7 @@
 	setContext("price-display", draft.settings);
 </script>
 
-{#if page.route.id === "/" || page.route.id === "/withdrawals"}
+{#if page.route.id === "/" || page.route.id === "/withdrawals" || page.route.id === "/projection"}
 	<div class="pension-app">
 		<header class="pension-header">
 			<div class="pension-container pension-header-inner">
@@ -26,7 +26,9 @@
 					>
 					<a
 						href={resolve("/withdrawals/")}
-						aria-current={page.route.id === "/withdrawals" ? "page" : undefined}>Withdrawals</a
+						aria-current={page.route.id === "/withdrawals" || page.route.id === "/projection"
+							? "page"
+							: undefined}>Withdrawals</a
 					>
 				</nav>
 			</div>

@@ -1,7 +1,7 @@
 <script>
 	import { getContext } from "svelte";
 	import { resolve } from "$app/paths";
-	import { Button, Input, Label, Select } from "flowbite-svelte";
+	import { Button, Card, Input, Label, Select } from "flowbite-svelte";
 	import {
 		createDefinedBenefit,
 		createDefinedContribution,
@@ -14,7 +14,6 @@
 	import { personalSavingsResult } from "$lib/personal-savings.js";
 	import { propertyEquityResult } from "$lib/property-equity.js";
 	import { realTermsFlowTotal, realTermsResidualGrowth, realTermsValue } from "$lib/real-terms.js";
-	import PriceDisplaySwitch from "$lib/PriceDisplaySwitch.svelte";
 	import DraftFileActions from "$lib/DraftFileActions.svelte";
 
 	const draft = getContext("pension-draft");
@@ -220,15 +219,7 @@
 	<DraftFileActions />
 </div>
 
-<div class="pension-page-price-display">
-	<PriceDisplaySwitch bind:realTerms={priceDisplay.realTerms} />
-	<p>
-		Real terms uses {draft.settings.annualInflationRate}% annual inflation to express future values
-		in today's prices.
-	</p>
-</div>
-
-<div class="pension-workspace">
+<div class="pension-workspace pension-pensions-workspace">
 	<section aria-labelledby="pensions-heading" class="pension-content">
 		<div class="pension-age-field">
 			<Label for="current-age">Current age</Label>
@@ -267,7 +258,7 @@
 		</div>
 
 		{#each draft.pensions as pension (pension.id)}
-			<div class="pension-entry">
+			<Card size="xl" shadow="sm" class="pension-resource-card pension-entry-card">
 				<div class="pension-entry-heading">
 					{#if pension.kind === "statePension"}
 						<h3>State Pension</h3>
@@ -286,14 +277,16 @@
 								id={`name-${pension.id}`}
 								type="text"
 								class="pension-name-input"
+								placeholder="Add asset name here..."
 								bind:value={pension.name}
 							/>
 						</h3>
+					{:else if pension.kind === "unselected"}
+						<h3>New pension</h3>
 					{:else}
 						<h3>
-							Source {draft.pensions.indexOf(pension) + 1}{pension.kind !== "unselected"
-								? ` - ${[...kinds, ...legacyKinds].find((type) => type.value === pension.kind)?.name}`
-								: ""}
+							{[...kinds, ...legacyKinds].find((type) => type.value === pension.kind)?.name ??
+								"Pension source"}
 						</h3>
 					{/if}
 					{#if pension.kind !== "statePension" || draft.pensions[0].id !== pension.id}<Button
@@ -1007,7 +1000,7 @@
 						</p>
 					{/if}
 				{/if}
-			</div>
+			</Card>
 		{:else}
 			<p class="pension-empty">No pension sources added yet.</p>
 		{/each}
@@ -1016,12 +1009,20 @@
 		</div>
 	</section>
 
-	<aside class="pension-aside">
-		<p class="pension-aside-label">NEXT STEP</p>
-		<h2>Plan your withdrawals</h2>
-		<p>Set a retirement date and an annual income target on the next page.</p>
-		<Button tag="a" href={resolve("/withdrawals/")} color="green" class="pension-action"
-			>Go to withdrawals</Button
-		>
+	<aside class="pension-aside pension-pensions-aside">
+		<div class="pension-pensions-aside-full">
+			<p class="pension-aside-label">NEXT STEP</p>
+			<h2>Plan your withdrawals</h2>
+			<p>Set a retirement date and an annual income target on the next page.</p>
+			<Button tag="a" href={resolve("/withdrawals/")} color="green" class="pension-action"
+				>Go to withdrawals</Button
+			>
+		</div>
+		<div class="pension-pensions-aside-mobile">
+			<h2>Planning your pensions</h2>
+			<Button tag="a" href={resolve("/withdrawals/")} color="green" class="pension-action"
+				>Go to withdrawals</Button
+			>
+		</div>
 	</aside>
 </div>

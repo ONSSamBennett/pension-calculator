@@ -302,6 +302,10 @@
 	gap: 48px;
 }
 
+.pension-workspace > .pension-content {
+	min-width: 0;
+}
+
 .pension-section-heading,
 .pension-entry-heading {
 	display: flex;
@@ -338,15 +342,16 @@
 }
 
 .pension-section-heading p,
-.pension-aside > p:not(.pension-aside-label) {
+.pension-aside > p:not(.pension-aside-label),
+.pension-withdrawals-aside-full > p:not(.pension-aside-label),
+.pension-pensions-aside-full > p:not(.pension-aside-label) {
 	color: var(--muted);
 	line-height: 1.6;
 	margin: 8px 0 0;
 }
 
-.pension-entry {
-	padding: 24px 0;
-	border-bottom: 1px solid #dce5dd;
+.pension-entry-card {
+	margin-top: 20px;
 }
 
 .pension-entry-heading {
@@ -516,13 +521,18 @@
 	background: var(--accent);
 	color: #fff;
 }
-
 .pension-page-price-display {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
 	gap: 24px;
 	margin: -24px 0 32px;
+}
+
+.pension-retirement-summary {
+	border: 0;
+	padding: 0;
+	background: transparent;
 }
 
 .pension-page-price-display > p {
@@ -541,8 +551,8 @@
 
 .pension-resource-groups {
 	display: grid;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
-	gap: 20px;
+	grid-template-columns: minmax(0, 1fr);
+	gap: 24px;
 	margin-top: 20px;
 }
 
@@ -570,21 +580,37 @@
 }
 
 .pension-resource-list li {
-	display: flex;
-	justify-content: space-between;
-	gap: 12px;
-	padding: 8px 0;
-	border-top: 1px solid rgb(0 0 0 / 12%);
+	min-width: 0;
 }
 
-.pension-resource-list li.pension-resource-pot-item {
-	display: block;
+.pension-resource-list {
+	display: grid;
+	gap: 12px;
 }
 
-.pension-resource-pot-header {
+.pension-resource-card {
+	max-width: none;
+	padding: 16px;
+	border-color: #dce5dd;
+	border-radius: 8px;
+	background: #fff;
+	color: var(--ink);
+}
+
+.pension-resource-card-header {
 	display: flex;
+	align-items: flex-start;
 	justify-content: space-between;
 	gap: 12px;
+}
+
+.pension-resource-card-header > span {
+	min-width: 0;
+}
+
+.pension-resource-card-header > strong {
+	flex-shrink: 0;
+	text-align: right;
 }
 
 .pension-drawdown {
@@ -637,10 +663,6 @@
 	border-top: 1px solid rgb(0 0 0 / 18%);
 }
 
-.pension-resource-list li > span {
-	min-width: 0;
-}
-
 .pension-resource-list small {
 	display: block;
 	color: var(--muted);
@@ -663,11 +685,52 @@
 	padding: 26px;
 }
 
+.pension-withdrawals-aside {
+	position: sticky;
+	top: 16px;
+	max-height: calc(100vh - 32px);
+	overflow-y: auto;
+	overscroll-behavior: contain;
+}
+
+.pension-withdrawals-aside-mobile {
+	display: none;
+}
+
+.pension-pensions-aside-mobile {
+	display: none;
+}
+
+@media (min-width: 761px) {
+	.pension-main:has(.pension-withdrawals-workspace),
+	.pension-main:has(.pension-pensions-workspace) {
+		padding-bottom: 0;
+	}
+
+	.pension-withdrawals-workspace {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.pension-pensions-aside {
+		position: sticky;
+		top: 16px;
+		max-height: calc(100vh - 32px);
+		overflow-y: auto;
+		overscroll-behavior: contain;
+	}
+
+	.pension-withdrawals-footer {
+		display: none;
+	}
+}
+
 .pension-aside h2 {
 	margin-top: 16px;
 }
 
-.pension-aside > p:not(.pension-aside-label) {
+.pension-aside > p:not(.pension-aside-label),
+.pension-withdrawals-aside-full > p:not(.pension-aside-label),
+.pension-pensions-aside-full > p:not(.pension-aside-label) {
 	margin: 16px 0 24px;
 }
 
@@ -689,15 +752,6 @@
 	.pension-page-actions {
 		position: static;
 		margin-top: 16px;
-	}
-
-	.pension-resource-groups {
-		grid-template-columns: 1fr;
-	}
-
-	.pension-resource-display {
-		align-items: flex-start;
-		flex-direction: column;
 	}
 
 	.pension-page-price-display {
@@ -733,6 +787,95 @@
 		grid-template-columns: 1fr;
 		gap: 32px;
 	}
+
+	.pension-withdrawals-workspace {
+		padding-bottom: 96px;
+	}
+
+	.pension-pensions-workspace {
+		padding-bottom: 96px;
+	}
+
+	.pension-withdrawals-aside {
+		display: none;
+	}
+
+	.pension-withdrawals-footer {
+		position: fixed;
+		right: 0;
+		bottom: 0;
+		left: 0;
+		z-index: 50;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 16px;
+		box-sizing: border-box;
+		width: 100%;
+		padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+		border-top: 3px solid var(--accent);
+		background: #fff;
+		box-shadow: 0 -8px 24px rgb(0 0 0 / 12%);
+	}
+
+	.pension-withdrawals-footer h2 {
+		margin: 0;
+		font-size: 18px;
+	}
+
+	.pension-withdrawals-footer .pension-action {
+		flex-shrink: 0;
+		margin: 0;
+	}
+
+	.pension-pensions-aside-full {
+		display: none;
+	}
+
+	.pension-pensions-aside {
+		position: fixed;
+		top: auto;
+		right: 0;
+		bottom: 0;
+		left: 0;
+		z-index: 50;
+		width: 100%;
+		max-height: none;
+		overflow: visible;
+		box-sizing: border-box;
+		padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+		box-shadow: 0 -8px 24px rgb(0 0 0 / 12%);
+	}
+
+	.pension-pensions-aside-mobile {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 16px;
+	}
+
+	.pension-pensions-aside-mobile h2 {
+		margin: 0;
+		font-size: 18px;
+	}
+
+	.pension-pensions-aside-mobile .pension-action {
+		flex-shrink: 0;
+		margin: 0;
+	}
+}
+
+.pension-projection-page {
+	max-width: 900px;
+}
+
+.pension-projection-page > .pension-action {
+	display: inline-block;
+	margin-bottom: 24px;
+}
+
+.pension-projection-panel {
+	width: 100%;
 }
 
 @media (max-width: 480px) {
