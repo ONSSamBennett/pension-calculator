@@ -207,7 +207,7 @@ test("settings round-trip, validate, and drive new growth defaults", () => {
 		realTerms: false
 	};
 	assert.equal(createDefinedBenefit(2, draft.settings.annualInflationRate).payGrowthRate, 3.1);
-		assert.equal(createDefinedBenefit(2, draft.settings.annualInflationRate).revaluationRate, 3.1);
+	assert.equal(createDefinedBenefit(2, draft.settings.annualInflationRate).revaluationRate, 3.1);
 	assert.equal(createDefinedContribution(3, draft.settings.annualInflationRate).payGrowthRate, 3.1);
 	assert.equal(
 		createPersonalSavings(4, draft.settings.annualInflationRate).contributionIncreaseRate,
@@ -1250,6 +1250,7 @@ test("switching methods retains inactive inputs without including them in known 
 	Object.assign(db, {
 		scheme: "care",
 		accrualMethod: "known",
+		revaluationRate: 0,
 		accruedAnnualPension: 6000,
 		pensionablePay: 54000,
 		accrualDenominator: 54,
