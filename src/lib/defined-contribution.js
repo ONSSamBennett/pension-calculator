@@ -26,7 +26,8 @@ export function definedContributionResult(
 	pension,
 	currentAge,
 	retirementAge,
-	asOfYear = new Date().getFullYear()
+	asOfYear = new Date().getFullYear(),
+	includeFutureFlows = false
 ) {
 	const age = number(currentAge, "current age", 16, 120);
 	if (!Number.isInteger(age)) throw new Error("Enter a valid current age");
@@ -101,6 +102,7 @@ export function definedContributionResult(
 	let futureFeesPaid = 0;
 	let projectedPot = existingPot;
 	let salary;
+	const futureFlows = [];
 	for (let contributionYear = asOfYear; contributionYear < targetYear; contributionYear++) {
 		let contribution = 0;
 		if (contributionYear >= start && contributionYear <= end) {
@@ -114,6 +116,12 @@ export function definedContributionResult(
 		futureInvestmentGrowth += gain;
 		futureFeesPaid += fee;
 		investmentGrowth += gain;
+		futureFlows.push({
+			age: age + (contributionYear - asOfYear) + 1,
+			contributions: contribution,
+			growth: gain,
+			fees: fee
+		});
 	}
 	if (!Number.isFinite(projectedPot) || !Number.isFinite(investmentGrowth)) {
 		throw new Error("These assumptions produce an invalid projection");
@@ -127,6 +135,7 @@ export function definedContributionResult(
 		investmentGrowth,
 		projectedPot,
 		valuationYear: targetYear,
-		returnRate: returnRate * 100
+		returnRate: returnRate * 100,
+		...(includeFutureFlows ? { futureFlows } : {})
 	};
 }

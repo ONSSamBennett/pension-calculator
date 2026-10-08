@@ -17,9 +17,14 @@ import { definedContributionResult } from "./defined-contribution.js";
 import { projectedStatePensionAnnual, statePensionAnnual } from "./state-pension.js";
 import { personalSavingsResult } from "./personal-savings.js";
 import { propertyEquityResult } from "./property-equity.js";
-import { DEFAULT_INFLATION_RATE, realTermsValue } from "./real-terms.js";
+import {
+	DEFAULT_INFLATION_RATE,
+	realTermsFlowTotal,
+	realTermsResidualGrowth,
+	realTermsValue
+} from "./real-terms.js";
 import { drawdownResult, drawdownStartingBalance } from "./drawdown.js";
-import { retirementIncomeChartData } from "./retirement-income-chart.js";
+import { isValidPlanAge, retirementIncomeChartData } from "./retirement-income-chart.js";
 
 test("fixed and percentage drawdown report whether and when a pot runs dry", () => {
 	const fixed = {
@@ -29,18 +34,19 @@ test("fixed and percentage drawdown report whether and when a pot runs dry", () 
 		returnMode: "custom",
 		customReturnRate: 0
 	};
-	assert.deepEqual(drawdownResult(100000, fixed, 40, 95), {
-		startingBalance: 100000,
-		totalWithdrawals: 100000,
-		endingBalance: 0,
-		dryAge: 70,
-		annualWithdrawals: [
-			{ age: 67, amount: 25000 },
-			{ age: 68, amount: 25000 },
-			{ age: 69, amount: 25000 },
-			{ age: 70, amount: 25000 }
-		]
-	});
+	const fixedResult = drawdownResult(100000, fixed, 67, 95);
+	assert.equal(fixedResult.startingBalance, 100000);
+	assert.equal(fixedResult.totalWithdrawals, 100000);
+	assert.equal(fixedResult.endingBalance, 0);
+	assert.equal(fixedResult.dryAge, 70);
+	assert.deepEqual(
+		fixedResult.annualWithdrawals.map((flow) => flow.age),
+		[67, 68, 69, 70]
+	);
+	assert.deepEqual(
+		fixedResult.annualWithdrawals.map((flow) => Math.round(flow.amount * 1000) / 1000),
+		[25000, 25625, 26265.625, 23109.375]
+	);
 	const percentage = {
 		...fixed,
 		withdrawalMethod: "percentage",
@@ -63,6 +69,11 @@ test("fixed and percentage drawdown report whether and when a pot runs dry", () 
 		() => drawdownResult(100000, { ...fixed, annualAmount: "" }, 40, 95),
 		/annual withdrawal amount/
 	);
+	const fixedInTodayPrices = { ...fixed, startAge: 40, annualAmount: 10000 };
+	assert.deepEqual(
+		drawdownResult(30000, fixedInTodayPrices, 40, 41).annualWithdrawals.map((flow) => flow.amount),
+		[10000, 10250]
+	);
 });
 
 test("retirement chart data stacks income and drawdown by age in selected prices", () => {
@@ -77,7 +88,8 @@ test("retirement chart data stacks income and drawdown by age in selected prices
 				amount: 1000,
 				valuationAge: 67,
 				pension: { annualIncreaseRate: 2 }
-			}
+			},
+			{ name: "Defined benefit", kind: "definedBenefit", amount: 2000, valuationAge: 67 }
 		],
 		pots: [
 			{
@@ -95,19 +107,33 @@ test("retirement chart data stacks income and drawdown by age in selected prices
 	assert.deepEqual(actual.ages, [67, 68]);
 	assert.deepEqual(actual.series, [
 		{ name: "State Pension", values: [1000, 1020] },
+		{ name: "Defined benefit", values: [2000, 2050] },
 		{ name: "ISA", values: [500, 400] }
 	]);
 	assert.ok(Math.abs(actual.targetValues[0] - 2000 * 1.025 ** 27) < 0.001);
 	assert.ok(Math.abs(actual.targetValues[1] - 2000 * 1.025 ** 28) < 0.001);
 	const real = retirementIncomeChartData({ ...inputs, realTerms: true });
 	assert.ok(Math.abs(real.series[0].values[0] - 1000 / 1.025 ** 27) < 0.001);
-	assert.ok(Math.abs(real.series[1].values[0] - 500 / 1.025 ** 27) < 0.001);
+	assert.ok(Math.abs(real.series[1].values[0] - 2000 / 1.025 ** 27) < 0.001);
+	assert.ok(Math.abs(real.series[1].values[1] - real.series[1].values[0]) < 0.001);
+	assert.ok(Math.abs(real.series[2].values[0] - 500 / 1.025 ** 27) < 0.001);
 	assert.deepEqual(real.targetValues, [2000, 2000]);
 	assert.deepEqual(retirementIncomeChartData({ ...inputs, finalAge: 30 }), {
 		ages: [],
 		series: [],
 		targetValues: null
 	});
+	assert.deepEqual(retirementIncomeChartData({ ...inputs, finalAge: 67 }), {
+		ages: [],
+		series: [],
+		targetValues: null
+	});
+	assert.equal(isValidPlanAge(67, "8"), false);
+	assert.equal(isValidPlanAge(67, "85"), true);
+	assert.equal(isValidPlanAge(49, "50"), true);
+	assert.equal(isValidPlanAge(67, "67"), false);
+	assert.equal(isValidPlanAge(67, "120"), true);
+	assert.equal(isValidPlanAge(120, "121"), false);
 });
 
 test("drawdown starting balance grows from current age at its selected return", () => {
@@ -119,6 +145,19 @@ test("drawdown starting balance grows from current age at its selected return", 
 test("real-terms values discount future amounts by 2.5% annual inflation", () => {
 	assert.equal(DEFAULT_INFLATION_RATE, 2.5);
 	assert.ok(Math.abs(realTermsValue(10000, 67, 40) - 10000 / 1.025 ** 27) < 0.001);
+	assert.ok(
+		Math.abs(
+			realTermsFlowTotal(
+				[
+					{ age: 41, contribution: 100 },
+					{ age: 42, contribution: 100 }
+				],
+				"contribution",
+				40
+			) -
+				(100 / 1.025 + 100 / 1.025 ** 2)
+		) < 0.001
+	);
 	assert.equal(realTermsValue(10000, 40, 40), 10000);
 	assert.equal(realTermsValue(10000, 35, 40), 10000);
 	assert.throws(() => realTermsValue("invalid", 67, 40), /real-terms calculation/);
@@ -493,6 +532,40 @@ test("savings contribution frequency, annual increase, return and fees change pr
 	assert.throws(() => personalSavingsResult(savings, 40, 39), /target retirement age/);
 });
 
+test("real-term savings breakdown deflates contributions, bonus, returns, and fees by period", () => {
+	const savings = createPersonalSavings(1);
+	Object.assign(savings, {
+		currentBalance: 1000,
+		contributionAmount: 100,
+		endAge: 41,
+		bonusRate: 25,
+		annualFeeRate: 0.5
+	});
+	const result = personalSavingsResult(savings, 40, 42, true);
+	assert.deepEqual(
+		result.futureFlows.map((flow) => flow.age),
+		[41, 42]
+	);
+	const realGrowth = realTermsResidualGrowth({
+		endingBalance: result.projectedBalance,
+		valuationAge: 42,
+		openingBalance: 1000,
+		currentAge: 40,
+		inflows: [
+			{ flows: result.futureFlows, field: "contributions" },
+			{ flows: result.futureFlows, field: "bonus" }
+		],
+		outflows: [{ flows: result.futureFlows, field: "fees" }]
+	});
+	const realBreakdown =
+		1000 +
+		realTermsFlowTotal(result.futureFlows, "contributions", 40) +
+		realTermsFlowTotal(result.futureFlows, "bonus", 40) +
+		realGrowth -
+		realTermsFlowTotal(result.futureFlows, "fees", 40);
+	assert.ok(Math.abs(realBreakdown - realTermsValue(result.projectedBalance, 42, 40)) < 0.01);
+});
+
 test("legacy property equity migrates and version-thirteen fields round-trip", () => {
 	const document = toDocument(createDefaultDraft());
 	for (const amount of [100000, 0, null]) {
@@ -719,6 +792,30 @@ test("DC return presets and custom percentage compound annually", () => {
 	assert.equal(definedContributionResult(dc, 40, 42, 2026).projectedPot, 15840);
 	dc.customReturnRate = "";
 	assert.throws(() => definedContributionResult(dc, 40, 42, 2026), /custom annual return/);
+});
+
+test("real-term DC breakdown deflates each future year's cash flows separately", () => {
+	const dc = createDefinedContribution(1);
+	Object.assign(dc, { startAge: 40, endAge: 41, pensionablePay: 100000 });
+	const result = definedContributionResult(dc, 40, 42, 2026, true);
+	assert.deepEqual(
+		result.futureFlows.map((flow) => flow.age),
+		[41, 42]
+	);
+	const realGrowth = realTermsResidualGrowth({
+		endingBalance: result.projectedPot,
+		valuationAge: 42,
+		openingBalance: result.existingPot,
+		currentAge: 40,
+		inflows: [{ flows: result.futureFlows, field: "contributions" }],
+		outflows: [{ flows: result.futureFlows, field: "fees" }]
+	});
+	const realBreakdown =
+		result.existingPot +
+		realTermsFlowTotal(result.futureFlows, "contributions", 40) +
+		realGrowth -
+		realTermsFlowTotal(result.futureFlows, "fees", 40);
+	assert.ok(Math.abs(realBreakdown - realTermsValue(result.projectedPot, 42, 40)) < 0.01);
 });
 
 test("DC entered pot does not reapply past returns", () => {

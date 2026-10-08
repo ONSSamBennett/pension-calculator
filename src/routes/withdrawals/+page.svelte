@@ -9,10 +9,13 @@
 	import { projectedStatePensionAnnual } from "$lib/state-pension.js";
 	import { DEFAULT_INFLATION_RATE, realTermsValue } from "$lib/real-terms.js";
 	import { drawdownResult, drawdownStartingBalance } from "$lib/drawdown.js";
-	import { retirementIncomeChartData } from "$lib/retirement-income-chart.js";
+	import { isValidPlanAge, retirementIncomeChartData } from "$lib/retirement-income-chart.js";
 	import AnnualIncomeChart from "$lib/AnnualIncomeChart.svelte";
+	import PriceDisplaySwitch from "$lib/PriceDisplaySwitch.svelte";
 
 	const draft = getContext("pension-draft");
+	const priceDisplay = getContext("price-display");
+	let planUntilInput = $state(String(draft.finalAge));
 	const currentYear = new Date().getFullYear();
 	const poundsAndPence = new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" });
 	const withdrawalMethods = [
@@ -25,10 +28,16 @@
 		{ name: "Optimistic (9%)", value: "optimistic" },
 		{ name: "Custom", value: "custom" }
 	];
-	let showRealTerms = $state(true);
 
+	function updatePlanUntilAge(event) {
+		planUntilInput = event.currentTarget.value;
+		const age = Number(planUntilInput);
+		if (isValidPlanAge(draft.retirementAge, planUntilInput)) {
+			draft.finalAge = age;
+		}
+	}
 	function amountInSelectedTerms(item) {
-		return showRealTerms
+		return priceDisplay.realTerms
 			? realTermsValue(item.amount, item.valuationAge, draft.currentAge)
 			: item.amount;
 	}
@@ -194,7 +203,7 @@
 			incomes: resources.incomes,
 			pots,
 			targetAnnualIncome: draft.annualIncome,
-			realTerms: showRealTerms
+			realTerms: priceDisplay.realTerms
 		});
 	}
 
@@ -210,6 +219,11 @@
 	<p class="pension-step">02 / 02 &nbsp; WITHDRAWALS</p>
 	<h1>Plan your withdrawals</h1>
 	<p>Set your retirement time horizon and annual income target.</p>
+</div>
+
+<div class="pension-page-price-display">
+	<PriceDisplaySwitch bind:realTerms={priceDisplay.realTerms} />
+	<p>Real terms uses 2.5% annual inflation to express future values in today's prices.</p>
 </div>
 
 <div class="pension-workspace">
@@ -233,7 +247,19 @@
 			</div>
 			<div>
 				<Label for="final-age">Plan until age</Label>
-				<Input id="final-age" type="number" min="18" max="120" bind:value={draft.finalAge} />
+				<Input
+					id="final-age"
+					type="number"
+					min={Number(draft.retirementAge) + 1}
+					max="120"
+					value={planUntilInput}
+					oninput={updatePlanUntilAge}
+				/>
+				{#if !isValidPlanAge(draft.retirementAge, planUntilInput)}
+					<p class="pension-error">
+						Enter a whole-number plan age greater than retirement age and no more than 120.
+					</p>
+				{/if}
 			</div>
 			<div>
 				<Label for="annual-income">Target annual income (£, today's prices)</Label>
@@ -245,21 +271,8 @@
 			aria-labelledby="retirement-resources-heading"
 		>
 			<h3 id="retirement-resources-heading">Retirement resources</h3>
-			<div class="pension-resource-display">
-				<span>Price display</span>
-				<div class="pension-price-toggle" role="group" aria-label="Price display">
-					<button
-						type="button"
-						aria-pressed={!showRealTerms}
-						onclick={() => (showRealTerms = false)}>Actual prices</button
-					>
-					<button type="button" aria-pressed={showRealTerms} onclick={() => (showRealTerms = true)}
-						>Real terms</button
-					>
-				</div>
-			</div>
 			<p class="pension-resource-note">
-				{#if showRealTerms}
+				{#if priceDisplay.realTerms}
 					Values are shown in today's prices, adjusted for {DEFAULT_INFLATION_RATE}% annual
 					inflation until each source's valuation age.
 				{:else}
@@ -323,7 +336,9 @@
 											</div>
 											{#if item.pension.drawdown.withdrawalMethod === "amount"}
 												<div>
-													<Label for={`drawdown-amount-${item.id}`}>Annual withdrawal (£)</Label>
+													<Label for={`drawdown-amount-${item.id}`}
+														>Annual withdrawal (£, today's prices)</Label
+													>
 													<Input
 														id={`drawdown-amount-${item.id}`}
 														type="number"
@@ -368,8 +383,9 @@
 											{/if}
 										</div>
 										<p class="pension-drawdown-note">
-											Withdrawals are taken annually at each age; returns apply to the remaining
-											balance between withdrawals. The estimate runs through your plan age.
+											Fixed withdrawals are entered in today's prices and rise by 2.5% each year in
+											the nominal simulation. Returns apply to the remaining balance between annual
+											withdrawals. The estimate runs through your plan age.
 										</p>
 										{#if drawdown.result}
 											<p class="pension-drawdown-result" aria-live="polite">
@@ -430,7 +446,7 @@
 			targetValues={incomeChart.targetValues}
 		/>
 		<p class="pension-chart-note">
-			{showRealTerms ? "Real terms use today's prices." : "Values shown in actual prices."}
+			{priceDisplay.realTerms ? "Real terms use today's prices." : "Values shown in actual prices."}
 			{#if incomeChart.targetValues}
 				Dashed line shows your target in today's prices, uprated by 2.5% for actual prices.
 			{/if}

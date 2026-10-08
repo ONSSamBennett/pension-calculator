@@ -8,3 +8,34 @@ export function realTermsValue(amount, valuationAge, currentAge) {
 	}
 	return value / (1 + DEFAULT_INFLATION_RATE / 100) ** Math.max(0, years);
 }
+
+export function realTermsFlowTotal(flows, amountField, currentAge) {
+	return flows.reduce(
+		(total, flow) => total + realTermsValue(flow[amountField], flow.age, currentAge),
+		0
+	);
+}
+
+export function realTermsResidualGrowth({
+	endingBalance,
+	valuationAge,
+	openingBalance,
+	currentAge,
+	inflows,
+	outflows
+}) {
+	const realInflows = inflows.reduce(
+		(total, flow) => total + realTermsFlowTotal(flow.flows, flow.field, currentAge),
+		0
+	);
+	const realOutflows = outflows.reduce(
+		(total, flow) => total + realTermsFlowTotal(flow.flows, flow.field, currentAge),
+		0
+	);
+	return (
+		realTermsValue(endingBalance, valuationAge, currentAge) -
+		realTermsValue(openingBalance, currentAge, currentAge) -
+		realInflows +
+		realOutflows
+	);
+}

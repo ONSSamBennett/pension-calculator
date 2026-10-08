@@ -1,5 +1,28 @@
 import { DEFAULT_INFLATION_RATE, realTermsValue } from "./real-terms.js";
 
+export function isValidPlanAge(retirementAge, planAge) {
+	if (
+		retirementAge === "" ||
+		retirementAge === null ||
+		retirementAge === undefined ||
+		planAge === "" ||
+		planAge === null ||
+		planAge === undefined
+	) {
+		return false;
+	}
+	const retirement = Number(retirementAge);
+	const plan = Number(planAge);
+	return (
+		Number.isInteger(retirement) &&
+		retirement >= 18 &&
+		retirement < 120 &&
+		Number.isInteger(plan) &&
+		plan > retirement &&
+		plan <= 120
+	);
+}
+
 export function retirementIncomeChartData({
 	currentAge,
 	retirementAge,
@@ -16,8 +39,7 @@ export function retirementIncomeChartData({
 		![current, start, end].every(Number.isInteger) ||
 		current < 18 ||
 		start < current ||
-		end < start ||
-		end > 120
+		!isValidPlanAge(retirementAge, finalAge)
 	) {
 		return { ages: [], series: [], targetValues: null };
 	}
@@ -27,13 +49,17 @@ export function retirementIncomeChartData({
 
 	for (const income of incomes) {
 		const valuationAge = Number(income.valuationAge);
-		const stateIncrease =
-			income.kind === "statePension" ? Number(income.pension.annualIncreaseRate) / 100 : 0;
+		const annualIncrease =
+			income.kind === "statePension"
+				? Number(income.pension.annualIncreaseRate) / 100
+				: income.kind === "definedBenefit"
+					? DEFAULT_INFLATION_RATE / 100
+					: 0;
 		series.push({
 			name: income.name,
 			values: ages.map((age) => {
 				if (age < valuationAge) return 0;
-				const amount = income.amount * (1 + stateIncrease) ** (age - valuationAge);
+				const amount = income.amount * (1 + annualIncrease) ** (age - valuationAge);
 				return display(amount, age);
 			})
 		});

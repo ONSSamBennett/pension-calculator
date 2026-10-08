@@ -13,8 +13,11 @@
 	import { projectedStatePensionAnnual, statePensionAnnual } from "$lib/state-pension.js";
 	import { personalSavingsResult } from "$lib/personal-savings.js";
 	import { propertyEquityResult } from "$lib/property-equity.js";
+	import { realTermsFlowTotal, realTermsResidualGrowth, realTermsValue } from "$lib/real-terms.js";
+	import PriceDisplaySwitch from "$lib/PriceDisplaySwitch.svelte";
 
 	const draft = getContext("pension-draft");
+	const priceDisplay = getContext("price-display");
 	const kinds = [
 		{ name: "Defined benefit", value: "definedBenefit" },
 		{ name: "Defined contribution", value: "definedContribution" },
@@ -66,6 +69,28 @@
 	});
 	const poundsAndPence = new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" });
 
+	function amountInSelectedTerms(amount, valuationAge) {
+		return priceDisplay.realTerms ? realTermsValue(amount, valuationAge, draft.currentAge) : amount;
+	}
+
+	function futureFlowTotal(result, field, totalField, currentBalance = "") {
+		if (!priceDisplay.realTerms) return result[totalField];
+		if (field !== "growth") return realTermsFlowTotal(result.futureFlows, field, draft.currentAge);
+
+		const isDc = "projectedPot" in result;
+		return realTermsResidualGrowth({
+			endingBalance: isDc ? result.projectedPot : result.projectedBalance,
+			valuationAge: draft.retirementAge,
+			openingBalance: isDc ? result.existingPot : Number(currentBalance || 0),
+			currentAge: draft.currentAge,
+			inflows: [
+				{ flows: result.futureFlows, field: "contributions" },
+				...(result.futureBonus ? [{ flows: result.futureFlows, field: "bonus" }] : [])
+			],
+			outflows: [{ flows: result.futureFlows, field: "fees" }]
+		});
+	}
+
 	function addPension() {
 		draft.pensions.push({ id: draft.nextId++, kind: "unselected", name: "", amount: "" });
 	}
@@ -108,7 +133,8 @@
 					pension,
 					draft.currentAge,
 					draft.retirementAge,
-					currentYear
+					currentYear,
+					true
 				)
 			};
 		} catch (error) {
@@ -129,7 +155,9 @@
 
 	function savingsResultFor(pension) {
 		try {
-			return { result: personalSavingsResult(pension, draft.currentAge, draft.retirementAge) };
+			return {
+				result: personalSavingsResult(pension, draft.currentAge, draft.retirementAge, true)
+			};
 		} catch (error) {
 			return { error: error.message };
 		}
@@ -162,6 +190,11 @@
 	<p class="pension-step">01 / 02 &nbsp; PENSIONS</p>
 	<h1>Your pensions</h1>
 	<p>Add your pension sources, savings and other assets for retirement.</p>
+</div>
+
+<div class="pension-page-price-display">
+	<PriceDisplaySwitch bind:realTerms={priceDisplay.realTerms} />
+	<p>Real terms uses 2.5% annual inflation to express future values in today's prices.</p>
 </div>
 
 <div class="pension-workspace">
@@ -307,14 +340,16 @@
 								>Estimated yearly State Pension {Number(pension.qualifyingAge) >
 								Number(draft.currentAge)
 									? `at age ${pension.qualifyingAge}`
-									: "now"}: {poundsAndPence.format(state.projected)}</strong
+									: "now"}: {poundsAndPence.format(
+									amountInSelectedTerms(state.projected, pension.qualifyingAge)
+								)}</strong
 							>
-							<p>At today's illustrative rate: {poundsAndPence.format(state.amount)}</p>
 						{:else}<p>{state.error}</p>{/if}
 					</div>
 					{#if pension.legacyAmount !== ""}<p class="pension-note">
-							Previously saved annual figure: {poundsAndPence.format(Number(pension.legacyAmount))}.
-							The estimate above uses qualifying years instead.
+							Previously saved annual figure: {poundsAndPence.format(
+								amountInSelectedTerms(Number(pension.legacyAmount), draft.currentAge)
+							)}. The estimate above uses qualifying years instead.
 						</p>{/if}
 				{:else if pension.kind === "definedBenefit"}
 					<div class="pension-fields">
@@ -512,7 +547,10 @@
 						{#if calculation.result}
 							<strong
 								>Estimated gross annual pension at age {calculation.result.valuationAge}: {pounds.format(
-									calculation.result.annualIncome
+									amountInSelectedTerms(
+										calculation.result.annualIncome,
+										calculation.result.valuationAge
+									)
 								)}</strong
 							>
 						{:else}
@@ -691,15 +729,27 @@
 						{#if projection.result}
 							<strong
 								>Projected pension pot at age {draft.retirementAge}: {pounds.format(
-									projection.result.projectedPot
+									amountInSelectedTerms(projection.result.projectedPot, Number(draft.retirementAge))
 								)}</strong
 							>
 							<p>Pension pot today: {pounds.format(projection.result.existingPot)}</p>
-							<p>Future contributions: {pounds.format(projection.result.futureContributions)}</p>
 							<p>
-								Future investment growth: {pounds.format(projection.result.futureInvestmentGrowth)}
+								Future contributions: {pounds.format(
+									futureFlowTotal(projection.result, "contributions", "futureContributions")
+								)}
 							</p>
-							<p>Future fees: {pounds.format(-projection.result.futureFeesPaid)}</p>
+							<p>
+								{priceDisplay.realTerms
+									? "Real investment growth after inflation"
+									: "Future investment growth"}: {pounds.format(
+									futureFlowTotal(projection.result, "growth", "futureInvestmentGrowth")
+								)}
+							</p>
+							<p>
+								Future fees: {pounds.format(
+									-futureFlowTotal(projection.result, "fees", "futureFeesPaid")
+								)}
+							</p>
 						{:else}<p>{projection.error}</p>{/if}
 					</div>
 				{:else if pension.kind === "propertyEquity"}
@@ -759,7 +809,10 @@
 						{#if property.result}
 							<strong
 								>Estimated property equity at age {draft.retirementAge}: {pounds.format(
-									property.result.estimatedEquity
+									amountInSelectedTerms(
+										property.result.estimatedEquity,
+										Number(draft.retirementAge)
+									)
 								)}</strong
 							>
 						{:else}<p>{property.error}</p>{/if}
@@ -873,15 +926,39 @@
 						{#if savings.result}
 							<strong
 								>Projected savings at age {draft.retirementAge}: {pounds.format(
-									savings.result.projectedBalance
+									amountInSelectedTerms(
+										savings.result.projectedBalance,
+										Number(draft.retirementAge)
+									)
 								)}</strong
 							>
-							<p>Future contributions: {pounds.format(savings.result.futureContributions)}</p>
-							<p>Additional bonus: {pounds.format(savings.result.futureBonus)}</p>
 							<p>
-								Future investment growth: {pounds.format(savings.result.futureInvestmentGrowth)}
+								Future contributions: {pounds.format(
+									futureFlowTotal(savings.result, "contributions", "futureContributions")
+								)}
 							</p>
-							<p>Future fees: {pounds.format(-savings.result.futureFeesPaid)}</p>
+							<p>
+								Additional bonus: {pounds.format(
+									futureFlowTotal(savings.result, "bonus", "futureBonus")
+								)}
+							</p>
+							<p>
+								{priceDisplay.realTerms
+									? "Real investment growth after inflation"
+									: "Future investment growth"}: {pounds.format(
+									futureFlowTotal(
+										savings.result,
+										"growth",
+										"futureInvestmentGrowth",
+										pension.currentBalance
+									)
+								)}
+							</p>
+							<p>
+								Future fees: {pounds.format(
+									-futureFlowTotal(savings.result, "fees", "futureFeesPaid")
+								)}
+							</p>
 						{:else}<p>{savings.error}</p>{/if}
 					</div>
 				{:else if pension.kind !== "unselected"}

@@ -317,6 +317,22 @@
 	color: #fff;
 }
 
+.pension-page-price-display {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 24px;
+	margin: -24px 0 32px;
+}
+
+.pension-page-price-display > p {
+	max-width: 640px;
+	margin: 16px 0 0;
+	color: var(--muted);
+	font-size: 14px;
+	line-height: 1.5;
+}
+
 .pension-resource-note {
 	margin: 8px 0 0;
 	font-size: 14px;
@@ -473,6 +489,12 @@
 	.pension-resource-display {
 		align-items: flex-start;
 		flex-direction: column;
+	}
+
+	.pension-page-price-display {
+		align-items: flex-start;
+		flex-direction: column;
+		gap: 0;
 	}
 
 	.pension-header-inner {

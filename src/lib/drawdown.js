@@ -1,3 +1,5 @@
+import { DEFAULT_INFLATION_RATE } from "./real-terms.js";
+
 const returnRates = { cautious: 3, balanced: 6, optimistic: 9 };
 
 function number(value, label, minimum = 0, maximum = Infinity) {
@@ -60,7 +62,12 @@ export function drawdownResult(startingBalance, options, currentAge, finalAge) {
 	const annualWithdrawals = [];
 	for (let year = start; year <= end && dryAge === null; year++) {
 		const amount =
-			options.withdrawalMethod === "amount" ? Math.min(balance, withdrawal) : balance * withdrawal;
+			options.withdrawalMethod === "amount"
+				? Math.min(
+						balance,
+						withdrawal * (1 + DEFAULT_INFLATION_RATE / 100) ** Math.max(0, year - current)
+					)
+				: balance * withdrawal;
 		annualWithdrawals.push({ age: year, amount });
 		balance -= amount;
 		totalWithdrawals += amount;

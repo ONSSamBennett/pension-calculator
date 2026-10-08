@@ -9,7 +9,9 @@
 
 	let { children } = $props();
 	const draft = $state(createDefaultDraft());
+	const priceDisplay = $state({ realTerms: true });
 	setContext("pension-draft", draft);
+	setContext("price-display", priceDisplay);
 </script>
 
 {#if page.route.id === "/" || page.route.id === "/withdrawals"}

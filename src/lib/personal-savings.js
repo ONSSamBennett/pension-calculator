@@ -23,7 +23,12 @@ function optionalNumber(value, label, maximum = Infinity) {
 		: number(value, label, 0, maximum);
 }
 
-export function personalSavingsResult(savings, currentAge, retirementAge) {
+export function personalSavingsResult(
+	savings,
+	currentAge,
+	retirementAge,
+	includeFutureFlows = false
+) {
 	const age = number(currentAge, "current age", 18, 120);
 	if (!Number.isInteger(age)) throw new Error("Enter a valid current age");
 	const targetAge = number(retirementAge, "target retirement age", age, 120);
@@ -58,6 +63,7 @@ export function personalSavingsResult(savings, currentAge, retirementAge) {
 	let futureBonus = 0;
 	let futureInvestmentGrowth = 0;
 	let futureFeesPaid = 0;
+	const futureFlows = [];
 	for (let year = 0; year < targetAge - age; year++) {
 		const contribution =
 			endAge !== null && age + year <= endAge ? contributionAmount * (1 + growthRate) ** year : 0;
@@ -70,6 +76,13 @@ export function personalSavingsResult(savings, currentAge, retirementAge) {
 			futureBonus += bonus;
 			futureInvestmentGrowth += gain;
 			futureFeesPaid += fee;
+			futureFlows.push({
+				age: age + year + (period + 1) / count,
+				contributions: contribution,
+				bonus,
+				growth: gain,
+				fees: fee
+			});
 		}
 	}
 	if (!Number.isFinite(projectedBalance))
@@ -79,6 +92,7 @@ export function personalSavingsResult(savings, currentAge, retirementAge) {
 		futureContributions,
 		futureBonus,
 		futureInvestmentGrowth,
-		futureFeesPaid
+		futureFeesPaid,
+		...(includeFutureFlows ? { futureFlows } : {})
 	};
 }

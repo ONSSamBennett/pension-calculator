@@ -123,6 +123,8 @@
 		role="img"
 		aria-label="Stacked column chart of annual retirement income by pension source"
 	></div>
+{:else if !ages.length}
+	<p class="pension-income-chart-empty">Set valid retirement and plan ages to show the chart.</p>
 {:else}
 	<p class="pension-income-chart-empty">Add valid retirement income sources to show the chart.</p>
 {/if}
