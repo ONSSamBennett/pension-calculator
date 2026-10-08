@@ -3,6 +3,7 @@ import test from "node:test";
 import {
 	applyDocument,
 	createDefaultDraft,
+	createDefaultSettings,
 	createDefinedBenefit,
 	createDefinedContribution,
 	createDrawdownOptions,
@@ -25,6 +26,11 @@ import {
 } from "./real-terms.js";
 import { drawdownResult, drawdownStartingBalance } from "./drawdown.js";
 import { isValidPlanAge, retirementIncomeChartData } from "./retirement-income-chart.js";
+
+function documentWithVersion(document, version) {
+	const { settings, ...legacyDocument } = structuredClone(document);
+	return { ...legacyDocument, formatVersion: version };
+}
 
 test("fixed and percentage drawdown report whether and when a pot runs dry", () => {
 	const fixed = {
@@ -74,6 +80,12 @@ test("fixed and percentage drawdown report whether and when a pot runs dry", () 
 		drawdownResult(30000, fixedInTodayPrices, 40, 41).annualWithdrawals.map((flow) => flow.amount),
 		[10000, 10250]
 	);
+	assert.deepEqual(
+		drawdownResult(30000, fixedInTodayPrices, 40, 41, 4).annualWithdrawals.map(
+			(flow) => flow.amount
+		),
+		[10000, 10400]
+	);
 });
 
 test("retirement chart data stacks income and drawdown by age in selected prices", () => {
@@ -118,6 +130,9 @@ test("retirement chart data stacks income and drawdown by age in selected prices
 	assert.ok(Math.abs(real.series[1].values[1] - real.series[1].values[0]) < 0.001);
 	assert.ok(Math.abs(real.series[2].values[0] - 500 / 1.025 ** 27) < 0.001);
 	assert.deepEqual(real.targetValues, [2000, 2000]);
+	const customInflation = retirementIncomeChartData({ ...inputs, annualInflationRate: 4 });
+	assert.ok(Math.abs(customInflation.series[1].values[1] - 2080) < 0.001);
+	assert.ok(Math.abs(customInflation.targetValues[0] - 2000 * 1.04 ** 27) < 0.001);
 	assert.deepEqual(retirementIncomeChartData({ ...inputs, finalAge: 30 }), {
 		ages: [],
 		series: [],
@@ -145,6 +160,7 @@ test("drawdown starting balance grows from current age at its selected return", 
 test("real-terms values discount future amounts by 2.5% annual inflation", () => {
 	assert.equal(DEFAULT_INFLATION_RATE, 2.5);
 	assert.ok(Math.abs(realTermsValue(10000, 67, 40) - 10000 / 1.025 ** 27) < 0.001);
+	assert.ok(Math.abs(realTermsValue(10000, 41, 40, 4) - 10000 / 1.04) < 0.001);
 	assert.ok(
 		Math.abs(
 			realTermsFlowTotal(
@@ -166,7 +182,8 @@ test("real-terms values discount future amounts by 2.5% annual inflation", () =>
 test("default draft round-trips without turning blank fields into zero", () => {
 	const initial = createDefaultDraft();
 	const document = JSON.parse(JSON.stringify(toDocument(initial)));
-	assert.equal(document.formatVersion, 14);
+	assert.equal(document.formatVersion, 15);
+	assert.deepEqual(document.settings, createDefaultSettings());
 	assert.equal(document.currentAge, 40);
 	assert.deepEqual(document.pensions[0], {
 		id: 1,
@@ -180,6 +197,32 @@ test("default draft round-trips without turning blank fields into zero", () => {
 	assert.equal(document.withdrawals.annualIncome, null);
 	assert.ok(!("nextId" in document));
 	assert.deepEqual(fromDocument(document), initial);
+});
+
+test("settings round-trip, validate, and drive new wage-growth defaults", () => {
+	const draft = createDefaultDraft();
+	draft.settings = {
+		annualInflationRate: 3.1,
+		annualHousePriceIncreaseRate: 4,
+		realTerms: false
+	};
+	assert.equal(createDefinedBenefit(2, draft.settings.annualInflationRate).payGrowthRate, 3.1);
+	assert.equal(createDefinedContribution(3, draft.settings.annualInflationRate).payGrowthRate, 3.1);
+	assert.equal(
+		createPersonalSavings(4, draft.settings.annualInflationRate).contributionIncreaseRate,
+		3.1
+	);
+	const document = JSON.parse(JSON.stringify(toDocument(draft)));
+	assert.deepEqual(fromDocument(document).settings, draft.settings);
+	for (const settings of [
+		{ ...document.settings, annualInflationRate: -1 },
+		{ ...document.settings, annualInflationRate: Infinity },
+		{ ...document.settings, annualHousePriceIncreaseRate: -100 },
+		{ ...document.settings, realTerms: 1 },
+		{ ...document.settings, extra: true }
+	]) {
+		assert.throws(() => fromDocument({ ...document, settings }));
+	}
 });
 
 test("State Pension uses qualifying years and caps at 35 years", () => {
@@ -225,7 +268,7 @@ test("version-ten State Pension imports keep NI inputs and gain the default incr
 	const document = toDocument(createDefaultDraft());
 	const { annualIncreaseRate, ...oldState } = document.pensions[0];
 	oldState.qualifyingYears = 20;
-	const restored = fromDocument({ ...document, formatVersion: 10, pensions: [oldState] });
+	const restored = fromDocument({ ...documentWithVersion(document, 10), pensions: [oldState] });
 	assert.equal(restored.pensions[0].qualifyingYears, 20);
 	assert.equal(restored.pensions[0].annualIncreaseRate, 3.2);
 });
@@ -234,8 +277,7 @@ test("legacy State Pension moves first without losing its saved annual amount", 
 	const draft = createDefaultDraft();
 	const file = toDocument(draft);
 	const oldFile = {
-		...file,
-		formatVersion: 9,
+		...documentWithVersion(file, 9),
 		pensions: [
 			{ id: 4, kind: "pot", name: "Other pension", amount: 5000 },
 			{ id: 9, kind: "statePension", name: "My State Pension", amount: 12000 }
@@ -260,8 +302,7 @@ test("current age round-trips and older files restore with the default age", () 
 	const document = toDocument(draft);
 	assert.equal(fromDocument(document).currentAge, 53);
 	assert.equal(document.pensions[1].amount, null);
-	const { currentAge, ...oldDocument } = document;
-	oldDocument.formatVersion = 1;
+	const { currentAge, ...oldDocument } = documentWithVersion(document, 1);
 	oldDocument.pensions = document.pensions.slice(1).map((pension) => {
 		const { drawdown, ...legacyPension } = pension;
 		return legacyPension;
@@ -273,7 +314,7 @@ test("current age round-trips and older files restore with the default age", () 
 	);
 	assert.throws(() => fromDocument({ ...oldDocument, currentAge: null }));
 	assert.deepEqual(
-		fromDocument({ ...document, formatVersion: 2, pensions: oldDocument.pensions })
+		fromDocument({ ...documentWithVersion(document, 2), pensions: oldDocument.pensions })
 			.pensions.slice(1)
 			.map((pension) => pension.kind),
 		["pot", "income"]
@@ -318,7 +359,7 @@ test("invalid documents are rejected without changing the current draft", () => 
 	draft.pensions.push({ id: 2, kind: "pot", name: "", amount: "" });
 	const valid = toDocument(draft);
 	const invalid = [
-		{ ...valid, formatVersion: 15 },
+		{ ...valid, formatVersion: 16 },
 		{ ...valid, currentAge: 17 },
 		{ ...valid, currentAge: 42.5 },
 		{
@@ -346,9 +387,11 @@ test("invalid documents are rejected without changing the current draft", () => 
 
 test("applying a validated document updates the existing draft reference", () => {
 	const draft = createDefaultDraft();
+	const settingsReference = draft.settings;
 	const document = toDocument(draft);
 	document.pensions = [{ id: 5, kind: "income", name: "Defined benefit", amount: 5000 }];
 	document.withdrawals.strategy = "percentage";
+	document.settings = { annualInflationRate: 3, annualHousePriceIncreaseRate: 4, realTerms: false };
 	const existing = draft;
 	applyDocument(draft, document);
 	assert.equal(draft, existing);
@@ -356,6 +399,8 @@ test("applying a validated document updates the existing draft reference", () =>
 	assert.equal(draft.pensions[0].kind, "statePension");
 	assert.equal(draft.pensions[1].name, "Defined benefit");
 	assert.equal(draft.strategy, "percentage");
+	assert.equal(draft.settings, settingsReference);
+	assert.deepEqual(draft.settings, document.settings);
 });
 
 test("DB status and CARE modes preserve both active and inactive fields", () => {
@@ -392,8 +437,7 @@ test("DB status and CARE modes preserve both active and inactive fields", () => 
 		document.pensions[1];
 	for (const version of [2, 3]) {
 		const imported = fromDocument({
-			...document,
-			formatVersion: version,
+			...documentWithVersion(document, version),
 			pensions: [{ ...oldDb, careMethod: accrualMethod, pastServiceYears: 5 }]
 		}).pensions[1];
 		assert.deepEqual(imported, {
@@ -404,19 +448,18 @@ test("DB status and CARE modes preserve both active and inactive fields", () => 
 		});
 	}
 	const importedV4 = fromDocument({
-		...document,
-		formatVersion: 4,
+		...documentWithVersion(document, 4),
 		pensions: [{ ...oldDb, accruedAnnualPension, accrualMethod, pastServiceYears: 5 }]
 	}).pensions[1];
 	assert.deepEqual(importedV4, { ...db, serviceStartAge: "", leaveAge: "" });
 	const importedV5 = fromDocument({
-		...document,
-		formatVersion: 5,
+		...documentWithVersion(document, 5),
 		pensions: [{ ...document.pensions[1], pastServiceYears: 5 }]
 	}).pensions[1];
 	assert.deepEqual(importedV5, db);
 	assert.deepEqual(
-		fromDocument({ ...document, formatVersion: 6, pensions: [document.pensions[1]] }).pensions[1],
+		fromDocument({ ...documentWithVersion(document, 6), pensions: [document.pensions[1]] })
+			.pensions[1],
 		db
 	);
 	assert.ok(!("pastServiceYears" in document.pensions[1]));
@@ -434,15 +477,14 @@ test("an unselected source and each new type survive JSON round trips", () => {
 	const document = JSON.parse(JSON.stringify(toDocument(draft)));
 	assert.equal(document.pensions[1].amount, null);
 	assert.deepEqual(fromDocument(document), { ...draft, nextId: 6 });
-	assert.throws(() => fromDocument({ ...document, formatVersion: 2 }));
+	assert.throws(() => fromDocument({ ...documentWithVersion(document, 2) }));
 });
 
 test("older savings balances migrate without losing zero or blank values", () => {
 	const document = toDocument(createDefaultDraft());
 	for (const amount of [25000, 0, null]) {
 		const restored = fromDocument({
-			...document,
-			formatVersion: 11,
+			...documentWithVersion(document, 11),
 			pensions: [document.pensions[0], { id: 4, kind: "personalSavings", name: "ISA", amount }]
 		});
 		assert.deepEqual(restored.pensions[1], {
@@ -570,8 +612,7 @@ test("legacy property equity migrates and version-thirteen fields round-trip", (
 	const document = toDocument(createDefaultDraft());
 	for (const amount of [100000, 0, null]) {
 		const restored = fromDocument({
-			...document,
-			formatVersion: 12,
+			...documentWithVersion(document, 12),
 			pensions: [document.pensions[0], { id: 4, kind: "propertyEquity", name: "Home", amount }]
 		});
 		assert.deepEqual(restored.pensions[1], {
@@ -581,14 +622,32 @@ test("legacy property equity migrates and version-thirteen fields round-trip", (
 		});
 		assert.equal(toDocument(restored).pensions[1].currentEquity, amount);
 	}
+	const versionFourteen = {
+		...documentWithVersion(document, 14),
+		pensions: [
+			document.pensions[0],
+			{
+				id: 4,
+				kind: "propertyEquity",
+				name: "Home",
+				currentEquity: 50000,
+				annualHousePriceIncreaseRate: 3,
+				remainingMortgage: 10000,
+				monthlyEquityPayment: 500
+			}
+		]
+	};
+	const migratedProperty = fromDocument(versionFourteen);
+	assert.equal(migratedProperty.settings.annualHousePriceIncreaseRate, 3);
+	assert.ok(!("annualHousePriceIncreaseRate" in migratedProperty.pensions[1]));
 	const draft = createDefaultDraft();
 	const property = createPropertyEquity(2);
 	Object.assign(property, {
 		currentEquity: 150000,
 		remainingMortgage: 80000,
-		monthlyEquityPayment: 750,
-		annualHousePriceIncreaseRate: 2.5
+		monthlyEquityPayment: 750
 	});
+	draft.settings.annualHousePriceIncreaseRate = 2.5;
 	draft.pensions.push(property);
 	const saved = JSON.parse(JSON.stringify(toDocument(draft)));
 	assert.deepEqual(fromDocument(saved).pensions[1], property);
@@ -608,7 +667,7 @@ test("property equity grows monthly and pays down mortgage until payoff or retir
 		remainingMortgage: 24000,
 		monthlyEquityPayment: 1000
 	});
-	const result = propertyEquityResult(property, 40, 42);
+	const result = propertyEquityResult(property, 40, 42, 2);
 	assert.equal(result.mortgagePaid, 24000);
 	assert.equal(result.remainingMortgage, 0);
 	assert.ok(Math.abs(result.propertyValue - 124000 * 1.02 ** 2) < 0.01);
@@ -616,22 +675,23 @@ test("property equity grows monthly and pays down mortgage until payoff or retir
 
 	property.remainingMortgage = 50000;
 	property.monthlyEquityPayment = 500;
-	const partial = propertyEquityResult(property, 40, 42);
+	const partial = propertyEquityResult(property, 40, 42, 2);
 	assert.equal(partial.mortgagePaid, 12000);
 	assert.equal(partial.remainingMortgage, 38000);
 	assert.ok(Math.abs(partial.estimatedEquity - (150000 * 1.02 ** 2 - 38000)) < 0.01);
-	assert.throws(() => propertyEquityResult(property, 40, 39), /target retirement age/);
+	const higherGrowth = propertyEquityResult(property, 40, 42, 4);
+	assert.ok(Math.abs(higherGrowth.propertyValue - 150000 * 1.04 ** 2) < 0.01);
+	assert.throws(() => propertyEquityResult(property, 40, 39, 2), /target retirement age/);
 	property.monthlyEquityPayment = "";
-	assert.throws(() => propertyEquityResult(property, 40, 42), /monthly mortgage payment/);
+	assert.throws(() => propertyEquityResult(property, 40, 42, 2), /monthly mortgage payment/);
 	property.remainingMortgage = "";
-	assert.equal(propertyEquityResult(property, 40, 42).remainingMortgage, 0);
+	assert.equal(propertyEquityResult(property, 40, 42, 2).remainingMortgage, 0);
 });
 
 test("old defined-contribution amounts migrate to a known existing pot", () => {
 	const document = toDocument(createDefaultDraft());
 	const legacy = {
-		...document,
-		formatVersion: 6,
+		...documentWithVersion(document, 6),
 		pensions: [{ id: 7, kind: "definedContribution", name: "Old scheme", amount: 0 }]
 	};
 	for (const version of [3, 4, 5, 6]) {
@@ -694,7 +754,10 @@ test("version-seven contribution years are kept without guessing ages", () => {
 	draft.pensions.push(dc);
 	const file = toDocument(draft);
 	const { startAge, endAge, annualFeeRate, drawdown, ...oldDc } = file.pensions[1];
-	const restored = fromDocument({ ...file, formatVersion: 7, pensions: [oldDc] }).pensions[1];
+	const restored = fromDocument({
+		...documentWithVersion(file, 7),
+		pensions: [oldDc]
+	}).pensions[1];
 	assert.equal(restored.annualFeeRate, 0.3);
 	assert.equal(restored.startAge, "");
 	assert.equal(restored.endAge, "");
@@ -710,8 +773,7 @@ test("version-seven contribution years are kept without guessing ages", () => {
 		restored
 	);
 	const versionEight = fromDocument({
-		...file,
-		formatVersion: 8,
+		...documentWithVersion(file, 8),
 		pensions: [{ ...oldDc, startAge: 38, endAge: 44 }]
 	}).pensions[1];
 	assert.equal(versionEight.annualFeeRate, 0.3);
@@ -750,8 +812,7 @@ test("per-pot drawdown settings round-trip and older pot drafts get cautious def
 		[dc.drawdown, savings.drawdown, legacyPot.drawdown]
 	);
 
-	const versionThirteen = structuredClone(document);
-	versionThirteen.formatVersion = 13;
+	const versionThirteen = documentWithVersion(document, 13);
 	for (const pension of versionThirteen.pensions) {
 		if (["definedContribution", "personalSavings", "pot"].includes(pension.kind)) {
 			delete pension.drawdown;
@@ -952,8 +1013,7 @@ test("version-five files derive service from ages instead of a saved year count"
 	draft.pensions.push(db);
 	const current = toDocument(draft);
 	const legacy = {
-		...current,
-		formatVersion: 5,
+		...documentWithVersion(current, 5),
 		pensions: [{ ...current.pensions[1], pastServiceYears: 1 }]
 	};
 	const restored = fromDocument(legacy).pensions[1];

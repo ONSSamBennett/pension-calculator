@@ -7,7 +7,7 @@
 	import { personalSavingsResult } from "$lib/personal-savings.js";
 	import { propertyEquityResult } from "$lib/property-equity.js";
 	import { projectedStatePensionAnnual } from "$lib/state-pension.js";
-	import { DEFAULT_INFLATION_RATE, realTermsValue } from "$lib/real-terms.js";
+	import { realTermsValue } from "$lib/real-terms.js";
 	import { drawdownResult, drawdownStartingBalance } from "$lib/drawdown.js";
 	import { isValidPlanAge, retirementIncomeChartData } from "$lib/retirement-income-chart.js";
 	import AnnualIncomeChart from "$lib/AnnualIncomeChart.svelte";
@@ -39,7 +39,12 @@
 	}
 	function amountInSelectedTerms(item) {
 		return priceDisplay.realTerms
-			? realTermsValue(item.amount, item.valuationAge, draft.currentAge)
+			? realTermsValue(
+					item.amount,
+					item.valuationAge,
+					draft.currentAge,
+					draft.settings.annualInflationRate
+				)
 			: item.amount;
 	}
 
@@ -85,7 +90,15 @@
 					options
 				);
 			}
-			return { result: drawdownResult(startingBalance, options, draft.currentAge, draft.finalAge) };
+			return {
+				result: drawdownResult(
+					startingBalance,
+					options,
+					draft.currentAge,
+					draft.finalAge,
+					draft.settings.annualInflationRate
+				)
+			};
 		} catch (error) {
 			return { message: error.message };
 		}
@@ -155,7 +168,12 @@
 					pension.kind === "propertyEquity" &&
 					(pension.currentEquity !== "" || pension.remainingMortgage !== "")
 				) {
-					const result = propertyEquityResult(pension, draft.currentAge, draft.retirementAge);
+					const result = propertyEquityResult(
+						pension,
+						draft.currentAge,
+						draft.retirementAge,
+						draft.settings.annualHousePriceIncreaseRate
+					);
 					resources.property.push({
 						id: pension.id,
 						name: sourceName(pension, "Property equity"),
@@ -204,7 +222,8 @@
 			incomes: resources.incomes,
 			pots,
 			targetAnnualIncome: draft.annualIncome,
-			realTerms: priceDisplay.realTerms
+			realTerms: priceDisplay.realTerms,
+			annualInflationRate: draft.settings.annualInflationRate
 		});
 	}
 
@@ -225,7 +244,10 @@
 
 <div class="pension-page-price-display">
 	<PriceDisplaySwitch bind:realTerms={priceDisplay.realTerms} />
-	<p>Real terms uses 2.5% annual inflation to express future values in today's prices.</p>
+	<p>
+		Real terms uses {draft.settings.annualInflationRate}% annual inflation to express future values
+		in today's prices.
+	</p>
 </div>
 
 <div class="pension-workspace">
@@ -275,8 +297,8 @@
 			<h3 id="retirement-resources-heading">Retirement resources</h3>
 			<p class="pension-resource-note">
 				{#if priceDisplay.realTerms}
-					Values are shown in today's prices, adjusted for {DEFAULT_INFLATION_RATE}% annual
-					inflation until each source's valuation age.
+					Values are shown in today's prices, adjusted for {draft.settings.annualInflationRate}%
+					annual inflation until each source's valuation age.
 				{:else}
 					Values are shown in actual prices at each source's valuation age.
 				{/if}
@@ -385,9 +407,10 @@
 											{/if}
 										</div>
 										<p class="pension-drawdown-note">
-											Fixed withdrawals are entered in today's prices and rise by 2.5% each year in
-											the nominal simulation. Returns apply to the remaining balance between annual
-											withdrawals. The estimate runs through your plan age.
+											Fixed withdrawals are entered in today's prices and rise by {draft.settings
+												.annualInflationRate}% each year in the nominal simulation. Returns apply to
+											the remaining balance between annual withdrawals. The estimate runs through
+											your plan age.
 										</p>
 										{#if drawdown.result}
 											<p class="pension-drawdown-result" aria-live="polite">
@@ -450,7 +473,8 @@
 		<p class="pension-chart-note">
 			{priceDisplay.realTerms ? "Real terms use today's prices." : "Values shown in actual prices."}
 			{#if incomeChart.targetValues}
-				Dashed line shows your target in today's prices, uprated by 2.5% for actual prices.
+				Dashed line shows your target in today's prices, uprated by {draft.settings
+					.annualInflationRate}% for actual prices.
 			{/if}
 		</p>
 		<hr class="pension-projection-divider" />

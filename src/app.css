@@ -163,6 +163,14 @@
 	margin-top: 16px;
 }
 
+.pension-settings-fields {
+	margin-top: 20px;
+}
+
+.pension-settings-price-mode {
+	margin-top: 20px;
+}
+
 .pension-import-field label {
 	display: block;
 	margin-bottom: 8px;

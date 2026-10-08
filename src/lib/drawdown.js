@@ -42,7 +42,13 @@ export function drawdownStartingBalance(balance, currentAge, startAge, options) 
 	return initialBalance * (1 + drawdownReturnRate(options)) ** (start - current);
 }
 
-export function drawdownResult(startingBalance, options, currentAge, finalAge) {
+export function drawdownResult(
+	startingBalance,
+	options,
+	currentAge,
+	finalAge,
+	annualInflationRate = DEFAULT_INFLATION_RATE
+) {
 	const current = age(currentAge, "current age");
 	const start = age(options.startAge, "drawdown start age", current);
 	const end = age(finalAge, "plan end age", start);
@@ -65,7 +71,7 @@ export function drawdownResult(startingBalance, options, currentAge, finalAge) {
 			options.withdrawalMethod === "amount"
 				? Math.min(
 						balance,
-						withdrawal * (1 + DEFAULT_INFLATION_RATE / 100) ** Math.max(0, year - current)
+						withdrawal * (1 + annualInflationRate / 100) ** Math.max(0, year - current)
 					)
 				: balance * withdrawal;
 		annualWithdrawals.push({ age: year, amount });

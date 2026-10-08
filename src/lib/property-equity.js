@@ -18,7 +18,12 @@ function optionalNumber(value, label) {
 	return value === "" || value === null || value === undefined ? 0 : number(value, label);
 }
 
-export function propertyEquityResult(property, currentAge, retirementAge) {
+export function propertyEquityResult(
+	property,
+	currentAge,
+	retirementAge,
+	annualHousePriceIncreaseRate
+) {
 	const age = number(currentAge, "current age", 18, 120);
 	if (!Number.isInteger(age)) throw new Error("Enter a valid current age");
 	const targetAge = number(retirementAge, "target retirement age", age, 120);
@@ -27,7 +32,7 @@ export function propertyEquityResult(property, currentAge, retirementAge) {
 	const mortgage = optionalNumber(property.remainingMortgage, "remaining mortgage");
 	const monthlyPayment = optionalNumber(property.monthlyEquityPayment, "monthly mortgage payment");
 	const annualIncrease =
-		number(property.annualHousePriceIncreaseRate, "annual house price increase", -99.99, 100) / 100;
+		number(annualHousePriceIncreaseRate, "annual house price increase", -99.99, 100) / 100;
 	if (mortgage > 0 && monthlyPayment <= 0) throw new Error("Enter a monthly mortgage payment");
 
 	let propertyValue = currentEquity + mortgage;

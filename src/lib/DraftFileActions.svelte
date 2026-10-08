@@ -1,6 +1,8 @@
 <script>
 	import { getContext } from "svelte";
 	import { applyDocument, fromDocument, toDocument } from "$lib/pension-draft.js";
+	import { Input, Label } from "flowbite-svelte";
+	import PriceDisplaySwitch from "$lib/PriceDisplaySwitch.svelte";
 
 	const draft = getContext("pension-draft");
 	let dialogElement = $state();
@@ -15,6 +17,11 @@
 		invalidateCheck();
 		jsonUrl = "";
 		status = { kind: "idle", message: "Choose a JSON file or check a URL." };
+		dialogElement?.showModal();
+	}
+
+	function openSettings() {
+		dialogMode = "settings";
 		dialogElement?.showModal();
 	}
 
@@ -205,12 +212,40 @@
 			<path d="M5 14v6h14v-6" />
 		</svg>
 	</button>
+	<button
+		class="pension-icon-button"
+		type="button"
+		aria-label="Settings"
+		title="Settings for inflation, house prices, and price display"
+		onclick={openSettings}
+	>
+		<svg
+			viewBox="0 0 24 24"
+			aria-hidden="true"
+			fill="none"
+			stroke="currentColor"
+			stroke-width="1.8"
+			stroke-linecap="round"
+			stroke-linejoin="round"
+		>
+			<path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" />
+			<path
+				d="m19.4 15 .1.1a1.7 1.7 0 1 1-2.4 2.4l-.1-.1a1.7 1.7 0 0 0-2.9 1.2v.2a1.7 1.7 0 1 1-3.4 0v-.2a1.7 1.7 0 0 0-2.9-1.2l-.1.1a1.7 1.7 0 1 1-2.4-2.4l.1-.1a1.7 1.7 0 0 0-1.2-2.9H4a1.7 1.7 0 1 1 0-3.4h.2a1.7 1.7 0 0 0 1.2-2.9l-.1-.1a1.7 1.7 0 1 1 2.4-2.4l.1.1a1.7 1.7 0 0 0 2.9-1.2V2a1.7 1.7 0 1 1 3.4 0v.2a1.7 1.7 0 0 0 2.9 1.2l.1-.1a1.7 1.7 0 1 1 2.4 2.4l-.1.1a1.7 1.7 0 0 0 1.2 2.9h.2a1.7 1.7 0 1 1 0 3.4h-.2a1.7 1.7 0 0 0-1.2 2.9Z"
+			/>
+		</svg>
+	</button>
 </div>
 
 <dialog class="pension-import-dialog" bind:this={dialogElement}>
 	<div class="pension-import-dialog-content">
 		<div class="pension-import-dialog-heading">
-			<h2>{dialogMode === "import" ? "Import pension data" : "Unable to save pension data"}</h2>
+			<h2>
+				{dialogMode === "import"
+					? "Import pension data"
+					: dialogMode === "settings"
+						? "Settings"
+						: "Unable to save pension data"}
+			</h2>
 			<button
 				class="pension-icon-button"
 				type="button"
@@ -275,6 +310,45 @@
 				</button>
 				<button class="pension-file-secondary-button" type="button" onclick={closeDialog}
 					>Cancel</button
+				>
+			</div>
+		{:else if dialogMode === "settings"}
+			<p>
+				These assumptions apply across the pension planner and are saved with your pension data.
+			</p>
+			<div class="pension-fields pension-settings-fields">
+				<div>
+					<Label for="annual-inflation-rate">Annual inflation rate (%)</Label>
+					<Input
+						id="annual-inflation-rate"
+						type="number"
+						min="0"
+						max="100"
+						step="0.1"
+						bind:value={draft.settings.annualInflationRate}
+					/>
+				</div>
+				<div>
+					<Label for="annual-house-price-increase">Annual house price increase (%)</Label>
+					<Input
+						id="annual-house-price-increase"
+						type="number"
+						min="-99.99"
+						max="100"
+						step="0.1"
+						bind:value={draft.settings.annualHousePriceIncreaseRate}
+					/>
+				</div>
+			</div>
+			<div class="pension-settings-price-mode">
+				<PriceDisplaySwitch bind:realTerms={draft.settings.realTerms} />
+			</div>
+			<p class="pension-note">
+				Inflation is used for real-term conversions, actual-price uprating, and defaults that track
+				inflation. House-price growth applies to all property projections.
+			</p>
+			<div class="pension-import-actions">
+				<button class="pension-file-primary-button" type="button" onclick={closeDialog}>Done</button
 				>
 			</div>
 		{:else}

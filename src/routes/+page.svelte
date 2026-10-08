@@ -71,12 +71,21 @@
 	const poundsAndPence = new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" });
 
 	function amountInSelectedTerms(amount, valuationAge) {
-		return priceDisplay.realTerms ? realTermsValue(amount, valuationAge, draft.currentAge) : amount;
+		return priceDisplay.realTerms
+			? realTermsValue(amount, valuationAge, draft.currentAge, draft.settings.annualInflationRate)
+			: amount;
 	}
 
 	function futureFlowTotal(result, field, totalField, currentBalance = "") {
 		if (!priceDisplay.realTerms) return result[totalField];
-		if (field !== "growth") return realTermsFlowTotal(result.futureFlows, field, draft.currentAge);
+		if (field !== "growth") {
+			return realTermsFlowTotal(
+				result.futureFlows,
+				field,
+				draft.currentAge,
+				draft.settings.annualInflationRate
+			);
+		}
 
 		const isDc = "projectedPot" in result;
 		return realTermsResidualGrowth({
@@ -84,6 +93,7 @@
 			valuationAge: draft.retirementAge,
 			openingBalance: isDc ? result.existingPot : Number(currentBalance || 0),
 			currentAge: draft.currentAge,
+			annualInflationRate: draft.settings.annualInflationRate,
 			inflows: [
 				{ flows: result.futureFlows, field: "contributions" },
 				...(result.futureBonus ? [{ flows: result.futureFlows, field: "bonus" }] : [])
@@ -109,11 +119,20 @@
 		const index = draft.pensions.findIndex((entry) => entry.id === pension.id);
 		draft.pensions[index] =
 			kind === "definedBenefit"
-				? { ...createDefinedBenefit(pension.id), name: pension.name }
+				? {
+						...createDefinedBenefit(pension.id, draft.settings.annualInflationRate),
+						name: pension.name
+					}
 				: kind === "definedContribution"
-					? { ...createDefinedContribution(pension.id), name: pension.name }
+					? {
+							...createDefinedContribution(pension.id, draft.settings.annualInflationRate),
+							name: pension.name
+						}
 					: kind === "personalSavings"
-						? { ...createPersonalSavings(pension.id), name: pension.name }
+						? {
+								...createPersonalSavings(pension.id, draft.settings.annualInflationRate),
+								name: pension.name
+							}
 						: kind === "propertyEquity"
 							? { ...createPropertyEquity(pension.id), name: pension.name }
 							: { id: pension.id, kind, name: pension.name, amount: "" };
@@ -166,7 +185,14 @@
 
 	function propertyEquityResultFor(pension) {
 		try {
-			return { result: propertyEquityResult(pension, draft.currentAge, draft.retirementAge) };
+			return {
+				result: propertyEquityResult(
+					pension,
+					draft.currentAge,
+					draft.retirementAge,
+					draft.settings.annualHousePriceIncreaseRate
+				)
+			};
 		} catch (error) {
 			return { error: error.message };
 		}
@@ -196,7 +222,10 @@
 
 <div class="pension-page-price-display">
 	<PriceDisplaySwitch bind:realTerms={priceDisplay.realTerms} />
-	<p>Real terms uses 2.5% annual inflation to express future values in today's prices.</p>
+	<p>
+		Real terms uses {draft.settings.annualInflationRate}% annual inflation to express future values
+		in today's prices.
+	</p>
 </div>
 
 <div class="pension-workspace">
@@ -767,17 +796,6 @@
 							/>
 						</div>
 						<div>
-							<Label for={`property-growth-${pension.id}`}>Annual house price increase (%)</Label>
-							<Input
-								id={`property-growth-${pension.id}`}
-								type="number"
-								min="-99.99"
-								max="100"
-								step="0.1"
-								bind:value={pension.annualHousePriceIncreaseRate}
-							/>
-						</div>
-						<div>
 							<Label for={`property-mortgage-${pension.id}`}>Remaining mortgage (£)</Label>
 							<Input
 								id={`property-mortgage-${pension.id}`}
@@ -803,8 +821,9 @@
 						{/if}
 					</div>
 					<p class="pension-note">
-						Mortgage payments reduce the balance monthly until it is repaid or you reach retirement.
-						Mortgage interest is not included.
+						Annual house-price change is set in Settings ({draft.settings
+							.annualHousePriceIncreaseRate}% per year). Mortgage payments reduce the balance
+						monthly until it is repaid or you reach retirement. Mortgage interest is not included.
 					</p>
 					{@const property = propertyEquityResultFor(pension)}
 					<div class="pension-result" aria-live="polite">

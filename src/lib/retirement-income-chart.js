@@ -30,7 +30,8 @@ export function retirementIncomeChartData({
 	incomes,
 	pots,
 	targetAnnualIncome,
-	realTerms
+	realTerms,
+	annualInflationRate = DEFAULT_INFLATION_RATE
 }) {
 	const current = Number(currentAge);
 	const start = Number(retirementAge);
@@ -44,7 +45,8 @@ export function retirementIncomeChartData({
 		return { ages: [], series: [], targetValues: null };
 	}
 	const ages = Array.from({ length: end - start + 1 }, (_, index) => start + index);
-	const display = (amount, age) => (realTerms ? realTermsValue(amount, age, current) : amount);
+	const display = (amount, age) =>
+		realTerms ? realTermsValue(amount, age, current, annualInflationRate) : amount;
 	const series = [];
 
 	for (const income of incomes) {
@@ -53,7 +55,7 @@ export function retirementIncomeChartData({
 			income.kind === "statePension"
 				? Number(income.pension.annualIncreaseRate) / 100
 				: income.kind === "definedBenefit"
-					? DEFAULT_INFLATION_RATE / 100
+					? annualInflationRate / 100
 					: 0;
 		series.push({
 			name: income.name,
@@ -80,9 +82,7 @@ export function retirementIncomeChartData({
 			: Number(targetAnnualIncome);
 	const targetValues = Number.isFinite(target)
 		? ages.map((age) =>
-				realTerms
-					? target
-					: target * (1 + DEFAULT_INFLATION_RATE / 100) ** Math.max(0, age - current)
+				realTerms ? target : target * (1 + annualInflationRate / 100) ** Math.max(0, age - current)
 			)
 		: null;
 	return { ages, series, targetValues };

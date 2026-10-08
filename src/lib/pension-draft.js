@@ -1,4 +1,6 @@
-export const FORMAT_VERSION = 14;
+import { DEFAULT_INFLATION_RATE } from "./real-terms.js";
+
+export const FORMAT_VERSION = 15;
 
 const simpleKinds = [
 	"pot",
@@ -49,7 +51,9 @@ const savingsNumbers = [
 	"customReturnRate"
 ];
 
-const propertyEquityNumbers = [
+const propertyEquityNumbers = ["currentEquity", "remainingMortgage", "monthlyEquityPayment"];
+
+const legacyPropertyEquityNumbers = [
 	"currentEquity",
 	"annualHousePriceIncreaseRate",
 	"remainingMortgage",
@@ -115,13 +119,12 @@ export function createPropertyEquity(id) {
 		kind: "propertyEquity",
 		name: "",
 		currentEquity: "",
-		annualHousePriceIncreaseRate: 2,
 		remainingMortgage: "",
 		monthlyEquityPayment: ""
 	};
 }
 
-export function createPersonalSavings(id) {
+export function createPersonalSavings(id, annualInflationRate = DEFAULT_INFLATION_RATE) {
 	return {
 		id,
 		kind: "personalSavings",
@@ -130,7 +133,7 @@ export function createPersonalSavings(id) {
 		contributionFrequency: "yearly",
 		contributionAmount: "",
 		endAge: "",
-		contributionIncreaseRate: 2.5,
+		contributionIncreaseRate: annualInflationRate,
 		returnMode: "balanced",
 		customReturnRate: "",
 		annualFeeRate: "",
@@ -139,7 +142,7 @@ export function createPersonalSavings(id) {
 	};
 }
 
-export function createDefinedContribution(id) {
+export function createDefinedContribution(id, annualInflationRate = DEFAULT_INFLATION_RATE) {
 	return {
 		id,
 		kind: "definedContribution",
@@ -149,7 +152,7 @@ export function createDefinedContribution(id) {
 		startYear: "",
 		endYear: "",
 		pensionablePay: "",
-		payGrowthRate: 2.5,
+		payGrowthRate: annualInflationRate,
 		employeeRate: 5,
 		employerRate: 3,
 		annualFeeRate: 0.3,
@@ -174,7 +177,7 @@ export function createStatePension(id) {
 	};
 }
 
-export function createDefinedBenefit(id) {
+export function createDefinedBenefit(id, annualInflationRate = DEFAULT_INFLATION_RATE) {
 	return {
 		id,
 		kind: "definedBenefit",
@@ -190,7 +193,7 @@ export function createDefinedBenefit(id) {
 		serviceStartAge: "",
 		leaveAge: "",
 		accrualDenominator: "",
-		payGrowthRate: 2.5,
+		payGrowthRate: annualInflationRate,
 		adjustmentRate: 0,
 		lumpSum: "",
 		revaluationRate: 0,
@@ -200,6 +203,7 @@ export function createDefinedBenefit(id) {
 
 export function createDefaultDraft() {
 	return {
+		settings: createDefaultSettings(),
 		pensions: [createStatePension(1)],
 		nextId: 2,
 		currentAge: 40,
@@ -208,6 +212,14 @@ export function createDefaultDraft() {
 		annualIncome: "",
 		strategy: "steady",
 		withdrawalRate: 4
+	};
+}
+
+export function createDefaultSettings() {
+	return {
+		annualInflationRate: DEFAULT_INFLATION_RATE,
+		annualHousePriceIncreaseRate: 2,
+		realTerms: true
 	};
 }
 
@@ -234,6 +246,31 @@ function formNumber(value, label) {
 	return documentNumber(value, label);
 }
 
+function restoreSettings(value) {
+	assertFields(
+		value,
+		["annualInflationRate", "annualHousePriceIncreaseRate", "realTerms"],
+		"Settings"
+	);
+	const annualInflationRate = documentNumber(value.annualInflationRate, "Annual inflation rate");
+	const annualHousePriceIncreaseRate = documentNumber(
+		value.annualHousePriceIncreaseRate,
+		"Annual house price increase"
+	);
+	if (annualInflationRate === null || annualInflationRate < 0 || annualInflationRate > 100) {
+		throw new Error("Annual inflation rate must be between 0 and 100");
+	}
+	if (
+		annualHousePriceIncreaseRate === null ||
+		annualHousePriceIncreaseRate < -99.99 ||
+		annualHousePriceIncreaseRate > 100
+	) {
+		throw new Error("Annual house price increase must be between -99.99 and 100");
+	}
+	if (typeof value.realTerms !== "boolean") throw new Error("Settings realTerms must be a boolean");
+	return { annualInflationRate, annualHousePriceIncreaseRate, realTerms: value.realTerms };
+}
+
 export function fromDocument(document) {
 	const version = document?.formatVersion;
 	if (
@@ -250,6 +287,7 @@ export function fromDocument(document) {
 		version !== 11 &&
 		version !== 12 &&
 		version !== 13 &&
+		version !== 14 &&
 		version !== FORMAT_VERSION
 	) {
 		throw new Error("Unsupported pension draft format version");
@@ -258,7 +296,13 @@ export function fromDocument(document) {
 		document,
 		version === 1
 			? ["formatVersion", "pensions", "withdrawals"]
-			: ["formatVersion", "currentAge", "pensions", "withdrawals"],
+			: [
+					"formatVersion",
+					...(version >= 2 ? ["currentAge"] : []),
+					"pensions",
+					"withdrawals",
+					...(version >= 15 ? ["settings"] : [])
+				],
 		"Document"
 	);
 	const currentAge = version === 1 ? 40 : documentNumber(document.currentAge, "Current age");
@@ -336,7 +380,12 @@ export function fromDocument(document) {
 								"returnMode"
 							]
 						: isPropertyEquity
-							? ["id", "kind", "name", ...propertyEquityNumbers]
+							? [
+									"id",
+									"kind",
+									"name",
+									...(version < 15 ? legacyPropertyEquityNumbers : propertyEquityNumbers)
+								]
 							: isLegacyPot
 								? ["id", "kind", "name", "amount", "drawdown"]
 								: isState
@@ -475,8 +524,9 @@ export function fromDocument(document) {
 		}
 		if (isPropertyEquity) {
 			const restored = { id: pension.id, kind: pension.kind, name: pension.name };
-			for (const field of propertyEquityNumbers)
+			for (const field of version < 15 ? legacyPropertyEquityNumbers : propertyEquityNumbers)
 				restored[field] = documentNumber(pension[field], `${label} ${field}`) ?? "";
+			delete restored.annualHousePriceIncreaseRate;
 			return restored;
 		}
 		if (pension.kind === "statePension") {
@@ -528,6 +578,24 @@ export function fromDocument(document) {
 	} else if (stateIndex > 0) {
 		pensions.unshift(pensions.splice(stateIndex, 1)[0]);
 	}
+	const settings = version >= 15 ? restoreSettings(document.settings) : createDefaultSettings();
+	if (version < 15) {
+		const previousProperty = document.pensions.find(
+			(pension) =>
+				pension.kind === "propertyEquity" && pension.annualHousePriceIncreaseRate !== undefined
+		);
+		if (previousProperty) {
+			const previousIncrease =
+				documentNumber(
+					previousProperty.annualHousePriceIncreaseRate,
+					"Annual house price increase"
+				) ?? 2;
+			settings.annualHousePriceIncreaseRate = restoreSettings({
+				...settings,
+				annualHousePriceIncreaseRate: previousIncrease
+			}).annualHousePriceIncreaseRate;
+		}
+	}
 
 	const withdrawal = document.withdrawals;
 	assertFields(
@@ -539,6 +607,7 @@ export function fromDocument(document) {
 		throw new Error("Unknown withdrawal strategy");
 	}
 	return {
+		settings,
 		pensions,
 		nextId: highestId + 1,
 		currentAge: currentAge ?? "",
@@ -553,6 +622,14 @@ export function fromDocument(document) {
 export function toDocument(draft) {
 	const document = {
 		formatVersion: FORMAT_VERSION,
+		settings: {
+			annualInflationRate: formNumber(draft.settings.annualInflationRate, "Annual inflation rate"),
+			annualHousePriceIncreaseRate: formNumber(
+				draft.settings.annualHousePriceIncreaseRate,
+				"Annual house price increase"
+			),
+			realTerms: draft.settings.realTerms
+		},
 		currentAge: formNumber(draft.currentAge, "Current age"),
 		pensions: draft.pensions.map((pension) => {
 			if (pension.kind === "pot") {
@@ -648,5 +725,10 @@ export function toDocument(draft) {
 
 export function applyDocument(draft, document) {
 	const restored = fromDocument(document);
+	const existingSettings = draft.settings;
 	Object.assign(draft, restored);
+	if (existingSettings) {
+		Object.assign(existingSettings, restored.settings);
+		draft.settings = existingSettings;
+	}
 }
