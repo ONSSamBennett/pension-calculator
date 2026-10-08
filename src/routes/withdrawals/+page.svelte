@@ -149,7 +149,7 @@
 					{#if resources.pots.length}
 						<ul class="pension-resource-list">
 							{#each resources.pots as item (item.id)}
-								{@const drawdown = drawdownFor(item)}
+								{@const drawdown = drawdownFor(item, draft, currentYear)}
 								<li class="pension-resource-card-item">
 									<Card size="xl" shadow="sm" class="pension-resource-card">
 										<div class="pension-resource-card-header">
