@@ -1,3 +1,4 @@
+approximates past pay from current pay or uses entered yearly earnings, with editable revaluation. New DB pay-growth and CARE revaluation assumptions default to the configured inflation rate (2.5% initially). The total scheme-quoted adjustment percentage applies at the chosen start age, and a quoted automatic lump sum is shown separately, not added to a pot. These are illustrative DB income estimates only: no tax, scheme-specific factors, full withdrawals projection or file controls are implemented.
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.

@@ -197,6 +197,7 @@ export function createDefinedBenefit(id, annualInflationRate = DEFAULT_INFLATION
 		adjustmentRate: 0,
 		lumpSum: "",
 		revaluationRate: 0,
+		revaluationRate: annualInflationRate,
 		earnings: []
 	};
 }
