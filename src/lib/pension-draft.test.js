@@ -182,7 +182,7 @@ test("real-terms values discount future amounts by 2.5% annual inflation", () =>
 test("default draft round-trips without turning blank fields into zero", () => {
 	const initial = createDefaultDraft();
 	const document = JSON.parse(JSON.stringify(toDocument(initial)));
-	assert.equal(document.formatVersion, 15);
+	assert.equal(document.formatVersion, 16);
 	assert.deepEqual(document.settings, createDefaultSettings());
 	assert.equal(document.currentAge, 40);
 	assert.deepEqual(document.pensions[0], {
@@ -360,7 +360,7 @@ test("invalid documents are rejected without changing the current draft", () => 
 	draft.pensions.push({ id: 2, kind: "pot", name: "", amount: "" });
 	const valid = toDocument(draft);
 	const invalid = [
-		{ ...valid, formatVersion: 16 },
+		{ ...valid, formatVersion: 17 },
 		{ ...valid, currentAge: 17 },
 		{ ...valid, currentAge: 42.5 },
 		{
@@ -492,6 +492,7 @@ test("older savings balances migrate without losing zero or blank values", () =>
 		assert.deepEqual(restored.pensions[1], {
 			...createPersonalSavings(4),
 			name: "ISA",
+			startAge: document.currentAge,
 			currentBalance: amount ?? ""
 		});
 		assert.equal(toDocument(restored).pensions[1].currentBalance, amount);
@@ -502,6 +503,7 @@ test("savings fields round-trip, while unknown fields and modes are rejected", (
 	const draft = createDefaultDraft();
 	const savings = createPersonalSavings(2);
 	Object.assign(savings, {
+		startAge: 38,
 		contributionFrequency: "weekly",
 		contributionAmount: 100,
 		endAge: 64,
@@ -511,9 +513,14 @@ test("savings fields round-trip, while unknown fields and modes are rejected", (
 	});
 	draft.pensions.push(savings);
 	const document = JSON.parse(JSON.stringify(toDocument(draft)));
+	assert.equal(document.pensions[1].startAge, 38);
 	assert.equal(document.pensions[1].annualFeeRate, null);
 	assert.equal(document.pensions[1].currentBalance, 0);
 	assert.deepEqual(fromDocument(document).pensions[1], savings);
+	const documentV15 = structuredClone(document);
+	documentV15.formatVersion = 15;
+	delete documentV15.pensions[1].startAge;
+	assert.equal(fromDocument(documentV15).pensions[1].startAge, draft.currentAge);
 	for (const source of [
 		{ ...document.pensions[1], contributionFrequency: "daily" },
 		{ ...document.pensions[1], returnMode: "unknown" },
@@ -550,6 +557,40 @@ test("savings deposits and bonus arrive at period end and grow until retirement"
 	savings.endAge = 39;
 	assert.equal(personalSavingsResult(savings, 40, 42).futureContributions, 0);
 	assert.equal(personalSavingsResult(savings, 40, 40).projectedBalance, 1000);
+});
+
+test("past savings contributions estimate today's pot when no balance is entered", () => {
+	const savings = createPersonalSavings(2);
+	Object.assign(savings, {
+		startAge: 38,
+		endAge: "",
+		currentBalance: "",
+		contributionAmount: 100,
+		contributionIncreaseRate: 10
+	});
+	const result = personalSavingsResult(savings, 40, 42);
+	const estimatedPot = 100 / 1.1 ** 2 + 100 / 1.1;
+	assert.ok(Math.abs(result.estimatedExistingPot - estimatedPot) < 0.001);
+	assert.equal(result.existingPot, result.estimatedExistingPot);
+	assert.equal(result.futureContributions, 210);
+
+	savings.currentBalance = 0;
+	const knownZeroBalance = personalSavingsResult(savings, 40, 42);
+	assert.equal(knownZeroBalance.existingPot, 0);
+	assert.equal(knownZeroBalance.estimatedExistingPot, 0);
+});
+
+test("savings start age delays contributions until the selected age", () => {
+	const savings = createPersonalSavings(2);
+	Object.assign(savings, {
+		startAge: 42,
+		endAge: 43,
+		contributionAmount: 100,
+		contributionIncreaseRate: 10
+	});
+	const result = personalSavingsResult(savings, 40, 44);
+	assert.equal(result.estimatedExistingPot, 0);
+	assert.ok(Math.abs(result.futureContributions - (121 + 133.1)) < 0.001);
 });
 
 test("savings contribution frequency, annual increase, return and fees change projection", () => {
@@ -819,6 +860,7 @@ test("per-pot drawdown settings round-trip and older pot drafts get cautious def
 		if (["definedContribution", "personalSavings", "pot"].includes(pension.kind)) {
 			delete pension.drawdown;
 		}
+		if (pension.kind === "personalSavings") delete pension.startAge;
 	}
 	const migrated = fromDocument(versionThirteen);
 	assert.deepEqual(

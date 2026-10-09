@@ -1,6 +1,6 @@
 import { DEFAULT_INFLATION_RATE } from "./real-terms.js";
 
-export const FORMAT_VERSION = 15;
+export const FORMAT_VERSION = 16;
 
 const simpleKinds = [
 	"pot",
@@ -42,6 +42,7 @@ const dcNumbers = [
 ];
 
 const savingsNumbers = [
+	"startAge",
 	"currentBalance",
 	"contributionAmount",
 	"endAge",
@@ -124,11 +125,16 @@ export function createPropertyEquity(id) {
 	};
 }
 
-export function createPersonalSavings(id, annualInflationRate = DEFAULT_INFLATION_RATE) {
+export function createPersonalSavings(
+	id,
+	annualInflationRate = DEFAULT_INFLATION_RATE,
+	startAge = ""
+) {
 	return {
 		id,
 		kind: "personalSavings",
 		name: "",
+		startAge,
 		currentBalance: "",
 		contributionFrequency: "yearly",
 		contributionAmount: "",
@@ -288,6 +294,7 @@ export function fromDocument(document) {
 		version !== 12 &&
 		version !== 13 &&
 		version !== 14 &&
+		version !== 15 &&
 		version !== FORMAT_VERSION
 	) {
 		throw new Error("Unsupported pension draft format version");
@@ -375,7 +382,7 @@ export function fromDocument(document) {
 								"kind",
 								"name",
 								...(version >= 14 ? ["drawdown"] : []),
-								...savingsNumbers,
+								...savingsNumbers.filter((field) => version >= 16 || field !== "startAge"),
 								"contributionFrequency",
 								"returnMode"
 							]
@@ -518,8 +525,12 @@ export function fromDocument(document) {
 						? restoreDrawdownOptions(pension.drawdown, `${label} drawdown`)
 						: createDrawdownOptions()
 			};
-			for (const field of savingsNumbers)
-				restored[field] = documentNumber(pension[field], `${label} ${field}`) ?? "";
+			for (const field of savingsNumbers) {
+				restored[field] =
+					field === "startAge" && version < 16
+						? (currentAge ?? "")
+						: (documentNumber(pension[field], `${label} ${field}`) ?? "");
+			}
 			return restored;
 		}
 		if (isPropertyEquity) {
@@ -548,6 +559,7 @@ export function fromDocument(document) {
 			return {
 				...createPersonalSavings(pension.id),
 				name: pension.name,
+				startAge: currentAge ?? "",
 				currentBalance: documentNumber(pension.amount, `${label} amount`) ?? ""
 			};
 		}

@@ -33,6 +33,11 @@ export function personalSavingsResult(
 	if (!Number.isInteger(age)) throw new Error("Enter a valid current age");
 	const targetAge = number(retirementAge, "target retirement age", age, 120);
 	if (!Number.isInteger(targetAge)) throw new Error("Enter a valid target retirement age");
+	const startAge =
+		savings.startAge === "" || savings.startAge === null || savings.startAge === undefined
+			? age
+			: number(savings.startAge, "contribution start age", 18, 120);
+	if (!Number.isInteger(startAge)) throw new Error("Enter a whole-year contribution start age");
 	const endAge =
 		savings.endAge === "" ? targetAge : number(savings.endAge, "contribution end age", 18, 120);
 	if (!Number.isInteger(endAge)) throw new Error("Enter a whole-year contribution end age");
@@ -50,19 +55,39 @@ export function personalSavingsResult(
 	const growthRate =
 		number(savings.contributionIncreaseRate, "annual contribution increase", -99.99, 100) / 100;
 	const contributionAmount = optionalNumber(savings.contributionAmount, "contribution amount");
+	const hasCurrentBalance =
+		savings.currentBalance !== "" &&
+		savings.currentBalance !== null &&
+		savings.currentBalance !== undefined;
 	const currentBalance = optionalNumber(savings.currentBalance, "current balance");
 	const count = periods[savings.contributionFrequency];
 	const periodReturn = (1 + returnRate) ** (1 / count) - 1;
 	const periodFee = 1 - (1 - annualFeeRate) ** (1 / count);
-	let projectedBalance = currentBalance;
+	let estimatedExistingPot = 0;
+	if (!hasCurrentBalance) {
+		const finalPastContributionAge = Math.min(age - 1, endAge);
+		for (
+			let contributionAge = startAge;
+			contributionAge <= finalPastContributionAge;
+			contributionAge++
+		) {
+			const yearsAgo = age - contributionAge;
+			estimatedExistingPot += (count * contributionAmount) / (1 + growthRate) ** yearsAgo;
+		}
+	}
+	const existingPot = hasCurrentBalance ? currentBalance : estimatedExistingPot;
+	let projectedBalance = existingPot;
 	let futureContributions = 0;
 	let futureBonus = 0;
 	let futureInvestmentGrowth = 0;
 	let futureFeesPaid = 0;
 	const futureFlows = [];
 	for (let year = 0; year < targetAge - age; year++) {
+		const contributionAge = age + year;
 		const contribution =
-			endAge !== null && age + year <= endAge ? contributionAmount * (1 + growthRate) ** year : 0;
+			contributionAge >= startAge && contributionAge <= endAge && startAge <= endAge
+				? contributionAmount * (1 + growthRate) ** year
+				: 0;
 		for (let period = 0; period < count; period++) {
 			const gain = projectedBalance * periodReturn;
 			const fee = (projectedBalance + gain) * periodFee;
@@ -85,6 +110,8 @@ export function personalSavingsResult(
 		throw new Error("These assumptions produce an invalid projection");
 	return {
 		projectedBalance,
+		existingPot,
+		estimatedExistingPot,
 		futureContributions,
 		futureBonus,
 		futureInvestmentGrowth,

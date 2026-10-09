@@ -76,7 +76,7 @@
 			: amount;
 	}
 
-	function futureFlowTotal(result, field, totalField, currentBalance = "") {
+	function futureFlowTotal(result, field, totalField) {
 		if (!priceDisplay.realTerms) return result[totalField];
 		if (field !== "growth") {
 			return realTermsFlowTotal(
@@ -91,7 +91,7 @@
 		return realTermsResidualGrowth({
 			endingBalance: isDc ? result.projectedPot : result.projectedBalance,
 			valuationAge: draft.retirementAge,
-			openingBalance: isDc ? result.existingPot : Number(currentBalance || 0),
+			openingBalance: result.existingPot,
 			currentAge: draft.currentAge,
 			annualInflationRate: draft.settings.annualInflationRate,
 			inflows: [
@@ -142,7 +142,11 @@
 						}
 					: kind === "personalSavings"
 						? {
-								...createPersonalSavings(pension.id, draft.settings.annualInflationRate),
+								...createPersonalSavings(
+									pension.id,
+									draft.settings.annualInflationRate,
+									draft.currentAge
+								),
 								name: pension.name
 							}
 						: kind === "propertyEquity"
@@ -882,6 +886,17 @@
 						<summary>Advanced settings</summary>
 						<div class="pension-fields pension-extra-fields">
 							<div>
+								<Label for={`savings-start-${pension.id}`}>Age contributions began</Label>
+								<Input
+									id={`savings-start-${pension.id}`}
+									type="number"
+									min="18"
+									max="120"
+									step="1"
+									bind:value={pension.startAge}
+								/>
+							</div>
+							<div>
 								<Label for={`savings-end-${pension.id}`}>Age contributions will end</Label>
 								<Input
 									id={`savings-end-${pension.id}`}
@@ -970,6 +985,13 @@
 									)
 								)}</strong
 							>
+							{#if savings.result.estimatedExistingPot > 0}
+								<p>
+									Estimated pot today from past contributions: {pounds.format(
+										savings.result.estimatedExistingPot
+									)}. Past investment returns and fees are not estimated.
+								</p>
+							{/if}
 							<p>
 								Future contributions: {pounds.format(
 									futureFlowTotal(savings.result, "contributions", "futureContributions")
@@ -984,12 +1006,7 @@
 								{priceDisplay.realTerms
 									? "Real investment growth after inflation"
 									: "Future investment growth"}: {pounds.format(
-									futureFlowTotal(
-										savings.result,
-										"growth",
-										"futureInvestmentGrowth",
-										pension.currentBalance
-									)
+									futureFlowTotal(savings.result, "growth", "futureInvestmentGrowth")
 								)}
 							</p>
 							<p>
