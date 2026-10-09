@@ -409,6 +409,7 @@ test("DB status and CARE modes preserve both active and inactive fields", () => 
 	const db = createDefinedBenefit(4);
 	assert.equal(db.normalAge, 65);
 	assert.equal(db.startAge, 65);
+	assert.equal(db.accrualDenominator, 60);
 	db.name = "Scheme A";
 	db.scheme = "care";
 	db.accrualMethod = "yearly";
@@ -571,7 +572,7 @@ test("savings contribution frequency, annual increase, return and fees change pr
 	assert.throws(() => personalSavingsResult(savings, 40, 42), /custom annual return/);
 	savings.returnMode = "optimistic";
 	savings.endAge = "";
-	assert.throws(() => personalSavingsResult(savings, 40, 42), /age when contributions end/);
+	assert.equal(personalSavingsResult(savings, 40, 42).futureContributions, 2430);
 	assert.throws(() => personalSavingsResult(savings, 40, 39), /target retirement age/);
 });
 

@@ -324,19 +324,6 @@
 				{#if pension.kind === "statePension"}
 					<div class="pension-fields">
 						<div>
-							<Label for={`state-years-${pension.id}`}
-								>Expected National Insurance qualifying years on retirement</Label
-							>
-							<Input
-								id={`state-years-${pension.id}`}
-								type="number"
-								min="0"
-								max="120"
-								step="1"
-								bind:value={pension.qualifyingYears}
-							/>
-						</div>
-						<div>
 							<Label for={`state-age-${pension.id}`}>Estimated qualifying age</Label>
 							<Input
 								id={`state-age-${pension.id}`}
@@ -347,20 +334,38 @@
 								bind:value={pension.qualifyingAge}
 							/>
 						</div>
-						<div>
-							<Label for={`state-increase-${pension.id}`}
-								>Expected annual State Pension increase (%)</Label
-							>
-							<Input
-								id={`state-increase-${pension.id}`}
-								type="number"
-								min="0"
-								max="100"
-								step="0.1"
-								bind:value={pension.annualIncreaseRate}
-							/>
-						</div>
 					</div>
+					<details class="pension-advanced-settings">
+						<summary>Advanced settings</summary>
+						<div class="pension-fields">
+							<div>
+								<Label for={`state-years-${pension.id}`}
+									>Expected National Insurance qualifying years on retirement</Label
+								>
+								<Input
+									id={`state-years-${pension.id}`}
+									type="number"
+									min="0"
+									max="120"
+									step="1"
+									bind:value={pension.qualifyingYears}
+								/>
+							</div>
+							<div>
+								<Label for={`state-increase-${pension.id}`}
+									>Expected annual State Pension increase (%)</Label
+								>
+								<Input
+									id={`state-increase-${pension.id}`}
+									type="number"
+									min="0"
+									max="100"
+									step="0.1"
+									bind:value={pension.annualIncreaseRate}
+								/>
+							</div>
+						</div>
+					</details>
 					{@const state = stateResultFor(pension)}
 					<div class="pension-result" aria-live="polite">
 						{#if state.projected !== undefined}<strong
@@ -414,37 +419,25 @@
 							later use, but is not included in this scheme estimate.
 						</p>
 					{/if}
-					<div class="pension-fields pension-extra-fields">
+					<div class="pension-fields pension-standard-fields">
 						<div>
 							<Label for={`scheme-${pension.id}`}>Scheme type</Label>
 							<Select id={`scheme-${pension.id}`} items={schemes} bind:value={pension.scheme} />
 						</div>
-						{#if hasCompletedService(pension)}
-							<div>
-								<Label for={`method-${pension.id}`}>Past accrual</Label>
-								<Select
-									id={`method-${pension.id}`}
-									items={accrualMethods}
-									bind:value={pension.accrualMethod}
-								/>
-							</div>
-						{/if}
-						{#if (!hasCompletedService(pension) || pension.accrualMethod !== "yearly") && (!hasCompletedService(pension) || pension.accrualMethod !== "known" || Number(pension.leaveAge) > Math.max(Number(draft.currentAge), Number(pension.serviceStartAge)))}
-							<div>
-								<Label for={`pay-${pension.id}`}
-									>{pension.leaveAge !== "" && Number(pension.leaveAge) < Number(draft.currentAge)
-										? "Pensionable pay when you left (£)"
-										: "Current pensionable pay (£)"}</Label
-								>
-								<Input
-									id={`pay-${pension.id}`}
-									type="number"
-									min="0"
-									step="1"
-									bind:value={pension.pensionablePay}
-								/>
-							</div>
-						{/if}
+						<div>
+							<Label for={`pay-${pension.id}`}
+								>{pension.leaveAge !== "" && Number(pension.leaveAge) < Number(draft.currentAge)
+									? "Pensionable pay when you left (£)"
+									: "Current pensionable pay (£)"}</Label
+							>
+							<Input
+								id={`pay-${pension.id}`}
+								type="number"
+								min="0"
+								step="1"
+								bind:value={pension.pensionablePay}
+							/>
+						</div>
 						<div>
 							<Label for={`normal-${pension.id}`}>Normal scheme pension age</Label>
 							<Input
@@ -456,20 +449,30 @@
 								bind:value={pension.normalAge}
 							/>
 						</div>
-						{#if !hasCompletedService(pension) || pension.accrualMethod !== "known" || Number(pension.leaveAge) > Math.max(Number(draft.currentAge), Number(pension.serviceStartAge))}
-							<div>
-								<Label for={`accrual-${pension.id}`}>Accrual denominator (for 1/60, enter 60)</Label
-								>
-								<Input
-									id={`accrual-${pension.id}`}
-									type="number"
-									min="1"
-									step="1"
-									bind:value={pension.accrualDenominator}
-								/>
-							</div>
-						{/if}
-						{#if pension.leaveAge !== "" && (Number(pension.leaveAge) > Number(draft.currentAge) || (pension.scheme === "finalSalary" && Number(pension.normalAge) > Math.max(Number(draft.currentAge), Number(pension.leaveAge))))}
+						<div>
+							<Label for={`accrual-${pension.id}`}>Accrual denominator (for 1/60, enter 60)</Label>
+							<Input
+								id={`accrual-${pension.id}`}
+								type="number"
+								min="1"
+								step="1"
+								bind:value={pension.accrualDenominator}
+							/>
+						</div>
+					</div>
+					<details class="pension-advanced-settings">
+						<summary>Advanced settings</summary>
+						<div class="pension-fields pension-extra-fields">
+							{#if hasCompletedService(pension)}
+								<div>
+									<Label for={`method-${pension.id}`}>Past accrual</Label>
+									<Select
+										id={`method-${pension.id}`}
+										items={accrualMethods}
+										bind:value={pension.accrualMethod}
+									/>
+								</div>
+							{/if}
 							<div>
 								<Label for={`growth-${pension.id}`}
 									>Annual pay growth and final-salary uprating (%)</Label
@@ -482,68 +485,72 @@
 									bind:value={pension.payGrowthRate}
 								/>
 							</div>
-						{/if}
-						{#if pension.scheme === "care"}
-							<div>
-								<Label for={`revalue-${pension.id}`}>Annual CARE revaluation (%)</Label>
-								<Input
-									id={`revalue-${pension.id}`}
-									type="number"
-									min="-100"
-									step="0.1"
-									bind:value={pension.revaluationRate}
-								/>
-							</div>
-						{/if}
-						{#if hasCompletedService(pension) && pension.accrualMethod === "known"}
-							<div>
-								<Label for={`accrued-${pension.id}`}>Current accrued gross annual pension (£)</Label
-								>
-								<Input
-									id={`accrued-${pension.id}`}
-									type="number"
-									min="0"
-									step="1"
-									bind:value={pension.accruedAnnualPension}
-								/>
-							</div>
-						{/if}
-					</div>
-					{#if hasCompletedService(pension) && pension.accrualMethod === "yearly"}
-						<div class="pension-earnings">
-							<h4>Pensionable pay by completed service year</h4>
-							{#each pension.earnings as row, index}
-								<div class="pension-earnings-row">
-									<div>
-										<Label for={`year-${pension.id}-${index}`}>Year</Label><Input
-											id={`year-${pension.id}-${index}`}
-											type="number"
-											min="1900"
-											step="1"
-											bind:value={row.year}
-										/>
-									</div>
-									<div>
-										<Label for={`earnings-${pension.id}-${index}`}>Pensionable pay (£)</Label><Input
-											id={`earnings-${pension.id}-${index}`}
-											type="number"
-											min="0"
-											step="1"
-											bind:value={row.pay}
-										/>
-									</div>
-									<Button color="light" size="sm" onclick={() => pension.earnings.splice(index, 1)}
-										>Remove year</Button
-									>
+							{#if pension.scheme === "care"}
+								<div>
+									<Label for={`revalue-${pension.id}`}>Annual CARE revaluation (%)</Label>
+									<Input
+										id={`revalue-${pension.id}`}
+										type="number"
+										min="-100"
+										step="0.1"
+										bind:value={pension.revaluationRate}
+									/>
 								</div>
-							{/each}
-							<Button
-								color="light"
-								size="sm"
-								onclick={() => pension.earnings.push({ year: "", pay: "" })}>Add year</Button
-							>
+							{/if}
+							{#if hasCompletedService(pension) && pension.accrualMethod === "known"}
+								<div>
+									<Label for={`accrued-${pension.id}`}
+										>Current accrued gross annual pension (£)</Label
+									>
+									<Input
+										id={`accrued-${pension.id}`}
+										type="number"
+										min="0"
+										step="1"
+										bind:value={pension.accruedAnnualPension}
+									/>
+								</div>
+							{/if}
 						</div>
-					{/if}
+						{#if hasCompletedService(pension) && pension.accrualMethod === "yearly"}
+							<div class="pension-earnings">
+								<h4>Pensionable pay by completed service year</h4>
+								{#each pension.earnings as row, index}
+									<div class="pension-earnings-row">
+										<div>
+											<Label for={`year-${pension.id}-${index}`}>Year</Label><Input
+												id={`year-${pension.id}-${index}`}
+												type="number"
+												min="1900"
+												step="1"
+												bind:value={row.year}
+											/>
+										</div>
+										<div>
+											<Label for={`earnings-${pension.id}-${index}`}>Pensionable pay (£)</Label
+											><Input
+												id={`earnings-${pension.id}-${index}`}
+												type="number"
+												min="0"
+												step="1"
+												bind:value={row.pay}
+											/>
+										</div>
+										<Button
+											color="light"
+											size="sm"
+											onclick={() => pension.earnings.splice(index, 1)}>Remove year</Button
+										>
+									</div>
+								{/each}
+								<Button
+									color="light"
+									size="sm"
+									onclick={() => pension.earnings.push({ year: "", pay: "" })}>Add year</Button
+								>
+							</div>
+						{/if}
+					</details>
 					<p class="pension-note">
 						New accrual and final-salary pay growth stop when you leave this scheme. CARE
 						revaluation continues to normal scheme age, or later leave age. Previously accrued
@@ -585,7 +592,7 @@
 						{/if}
 					</div>
 				{:else if pension.kind === "definedContribution"}
-					<div class="pension-fields">
+					<div class="pension-fields pension-standard-fields">
 						<div>
 							<Label for={`dc-start-${pension.id}`}>Age contributions began</Label>
 							<Input
@@ -619,16 +626,6 @@
 							/>
 						</div>
 						<div>
-							<Label for={`dc-growth-${pension.id}`}>Annual pay growth (%)</Label>
-							<Input
-								id={`dc-growth-${pension.id}`}
-								type="number"
-								min="-99.99"
-								step="0.1"
-								bind:value={pension.payGrowthRate}
-							/>
-						</div>
-						<div>
 							<Label for={`dc-employee-${pension.id}`}>Employee contribution (%)</Label>
 							<Input
 								id={`dc-employee-${pension.id}`}
@@ -650,97 +647,115 @@
 								bind:value={pension.employerRate}
 							/>
 						</div>
-						<div>
-							<Label for={`dc-return-${pension.id}`}>Expected annual return</Label>
-							<Select
-								id={`dc-return-${pension.id}`}
-								items={returnModes}
-								bind:value={pension.returnMode}
-							/>
-						</div>
-						<div>
-							<Label for={`dc-fee-${pension.id}`}>Annual fee (% of pot)</Label>
-							<Input
-								id={`dc-fee-${pension.id}`}
-								type="number"
-								min="0"
-								max="100"
-								step="0.01"
-								bind:value={pension.annualFeeRate}
-							/>
-						</div>
-						{#if pension.returnMode === "custom"}
+					</div>
+					<details class="pension-advanced-settings">
+						<summary>Advanced settings</summary>
+						<div class="pension-fields pension-extra-fields">
 							<div>
-								<Label for={`dc-custom-${pension.id}`}>Custom annual return (%)</Label>
+								<Label for={`dc-growth-${pension.id}`}>Annual pay growth (%)</Label>
 								<Input
-									id={`dc-custom-${pension.id}`}
+									id={`dc-growth-${pension.id}`}
 									type="number"
-									min="-100"
-									max="100"
+									min="-99.99"
 									step="0.1"
-									bind:value={pension.customReturnRate}
+									bind:value={pension.payGrowthRate}
 								/>
 							</div>
-						{/if}
-						{#if pension.startAge !== "" && Number(pension.startAge) < Number(draft.currentAge)}
 							<div>
-								<Label for={`dc-past-${pension.id}`}>Existing pension pot</Label>
+								<Label for={`dc-return-${pension.id}`}>Expected annual return</Label>
 								<Select
-									id={`dc-past-${pension.id}`}
-									items={pastPotMethods}
-									bind:value={pension.pastPotMethod}
+									id={`dc-return-${pension.id}`}
+									items={returnModes}
+									bind:value={pension.returnMode}
 								/>
 							</div>
-							{#if pension.pastPotMethod === "known"}
+							<div>
+								<Label for={`dc-fee-${pension.id}`}>Annual fee (% of pot)</Label>
+								<Input
+									id={`dc-fee-${pension.id}`}
+									type="number"
+									min="0"
+									max="100"
+									step="0.01"
+									bind:value={pension.annualFeeRate}
+								/>
+							</div>
+							{#if pension.returnMode === "custom"}
 								<div>
-									<Label for={`dc-pot-${pension.id}`}>Current pension pot (£)</Label>
+									<Label for={`dc-custom-${pension.id}`}>Custom annual return (%)</Label>
 									<Input
-										id={`dc-pot-${pension.id}`}
+										id={`dc-custom-${pension.id}`}
 										type="number"
-										min="0"
-										step="1"
-										bind:value={pension.existingPot}
+										min="-100"
+										max="100"
+										step="0.1"
+										bind:value={pension.customReturnRate}
 									/>
 								</div>
 							{/if}
-						{/if}
-					</div>
-					{#if pension.startAge !== "" && Number(pension.startAge) < Number(draft.currentAge) && pension.pastPotMethod === "yearly"}
-						<div class="pension-earnings">
-							<h4>Pensionable salary by completed contribution year</h4>
-							{#each pension.earnings as row, index}
-								<div class="pension-earnings-row">
+							{#if pension.startAge !== "" && Number(pension.startAge) < Number(draft.currentAge)}
+								<div>
+									<Label for={`dc-past-${pension.id}`}>Existing pension pot</Label>
+									<Select
+										id={`dc-past-${pension.id}`}
+										items={pastPotMethods}
+										bind:value={pension.pastPotMethod}
+									/>
+								</div>
+								{#if pension.pastPotMethod === "known"}
 									<div>
-										<Label for={`dc-year-${pension.id}-${index}`}>Year</Label><Input
-											id={`dc-year-${pension.id}-${index}`}
-											type="number"
-											min="1900"
-											step="1"
-											bind:value={row.year}
-										/>
-									</div>
-									<div>
-										<Label for={`dc-earnings-${pension.id}-${index}`}>Pensionable salary (£)</Label
-										><Input
-											id={`dc-earnings-${pension.id}-${index}`}
+										<Label for={`dc-pot-${pension.id}`}>Current pension pot (£)</Label>
+										<Input
+											id={`dc-pot-${pension.id}`}
 											type="number"
 											min="0"
 											step="1"
-											bind:value={row.pay}
+											bind:value={pension.existingPot}
 										/>
 									</div>
-									<Button color="light" size="sm" onclick={() => pension.earnings.splice(index, 1)}
-										>Remove year</Button
-									>
-								</div>
-							{/each}
-							<Button
-								color="light"
-								size="sm"
-								onclick={() => pension.earnings.push({ year: "", pay: "" })}>Add year</Button
-							>
+								{/if}
+							{/if}
 						</div>
-					{/if}
+						{#if pension.startAge !== "" && Number(pension.startAge) < Number(draft.currentAge) && pension.pastPotMethod === "yearly"}
+							<div class="pension-earnings">
+								<h4>Pensionable salary by completed contribution year</h4>
+								{#each pension.earnings as row, index}
+									<div class="pension-earnings-row">
+										<div>
+											<Label for={`dc-year-${pension.id}-${index}`}>Year</Label><Input
+												id={`dc-year-${pension.id}-${index}`}
+												type="number"
+												min="1900"
+												step="1"
+												bind:value={row.year}
+											/>
+										</div>
+										<div>
+											<Label for={`dc-earnings-${pension.id}-${index}`}
+												>Pensionable salary (£)</Label
+											><Input
+												id={`dc-earnings-${pension.id}-${index}`}
+												type="number"
+												min="0"
+												step="1"
+												bind:value={row.pay}
+											/>
+										</div>
+										<Button
+											color="light"
+											size="sm"
+											onclick={() => pension.earnings.splice(index, 1)}>Remove year</Button
+										>
+									</div>
+								{/each}
+								<Button
+									color="light"
+									size="sm"
+									onclick={() => pension.earnings.push({ year: "", pay: "" })}>Add year</Button
+								>
+							</div>
+						{/if}
+					</details>
 					{#if (pension.startYear !== "" || pension.endYear !== "") && (pension.startAge === "" || pension.endAge === "")}
 						<p class="pension-note">
 							This previous draft recorded contribution years {pension.startYear} to {pension.endYear}.
@@ -801,20 +816,18 @@
 								bind:value={pension.remainingMortgage}
 							/>
 						</div>
-						{#if pension.remainingMortgage !== ""}
-							<div>
-								<Label for={`property-payment-${pension.id}`}
-									>Monthly mortgage equity payment (£)</Label
-								>
-								<Input
-									id={`property-payment-${pension.id}`}
-									type="number"
-									min="0"
-									step="1"
-									bind:value={pension.monthlyEquityPayment}
-								/>
-							</div>
-						{/if}
+						<div>
+							<Label for={`property-payment-${pension.id}`}
+								>Monthly mortgage equity payment (£)</Label
+							>
+							<Input
+								id={`property-payment-${pension.id}`}
+								type="number"
+								min="0"
+								step="1"
+								bind:value={pension.monthlyEquityPayment}
+							/>
+						</div>
 					</div>
 					<p class="pension-note">
 						Annual house-price change is set in Settings ({draft.settings
@@ -835,7 +848,7 @@
 						{:else}<p>{property.error}</p>{/if}
 					</div>
 				{:else if pension.kind === "personalSavings"}
-					<div class="pension-fields">
+					<div class="pension-fields pension-standard-fields">
 						<div>
 							<Label for={`savings-balance-${pension.id}`}>Current balance (£)</Label>
 							<Input
@@ -864,75 +877,83 @@
 								bind:value={pension.contributionAmount}
 							/>
 						</div>
-						<div>
-							<Label for={`savings-end-${pension.id}`}>Age contributions will end</Label>
-							<Input
-								id={`savings-end-${pension.id}`}
-								type="number"
-								min="18"
-								max="120"
-								step="1"
-								bind:value={pension.endAge}
-							/>
-						</div>
-						<div>
-							<Label for={`savings-increase-${pension.id}`}>Annual contribution increase (%)</Label>
-							<Input
-								id={`savings-increase-${pension.id}`}
-								type="number"
-								min="-99.99"
-								max="100"
-								step="0.1"
-								bind:value={pension.contributionIncreaseRate}
-							/>
-						</div>
-						<div>
-							<Label for={`savings-return-${pension.id}`}>Expected annual return</Label>
-							<Select
-								id={`savings-return-${pension.id}`}
-								items={returnModes}
-								bind:value={pension.returnMode}
-							/>
-						</div>
-						{#if pension.returnMode === "custom"}
+					</div>
+					<details class="pension-advanced-settings">
+						<summary>Advanced settings</summary>
+						<div class="pension-fields pension-extra-fields">
 							<div>
-								<Label for={`savings-custom-${pension.id}`}>Custom annual return (%)</Label>
+								<Label for={`savings-end-${pension.id}`}>Age contributions will end</Label>
 								<Input
-									id={`savings-custom-${pension.id}`}
+									id={`savings-end-${pension.id}`}
 									type="number"
-									min="-100"
-									max="100"
-									step="0.1"
-									bind:value={pension.customReturnRate}
+									min="18"
+									max="120"
+									step="1"
+									value={pension.endAge === "" ? draft.retirementAge : pension.endAge}
+									oninput={(event) => (pension.endAge = event.currentTarget.value)}
 								/>
 							</div>
-						{/if}
-						<div>
-							<Label for={`savings-fee-${pension.id}`}>Annual fee (% of balance)</Label>
-							<Input
-								id={`savings-fee-${pension.id}`}
-								type="number"
-								min="0"
-								max="100"
-								step="0.01"
-								bind:value={pension.annualFeeRate}
-							/>
+							<div>
+								<Label for={`savings-increase-${pension.id}`}
+									>Annual contribution increase (%)</Label
+								>
+								<Input
+									id={`savings-increase-${pension.id}`}
+									type="number"
+									min="-99.99"
+									max="100"
+									step="0.1"
+									bind:value={pension.contributionIncreaseRate}
+								/>
+							</div>
+							<div>
+								<Label for={`savings-return-${pension.id}`}>Expected annual return</Label>
+								<Select
+									id={`savings-return-${pension.id}`}
+									items={returnModes}
+									bind:value={pension.returnMode}
+								/>
+							</div>
+							{#if pension.returnMode === "custom"}
+								<div>
+									<Label for={`savings-custom-${pension.id}`}>Custom annual return (%)</Label>
+									<Input
+										id={`savings-custom-${pension.id}`}
+										type="number"
+										min="-100"
+										max="100"
+										step="0.1"
+										bind:value={pension.customReturnRate}
+									/>
+								</div>
+							{/if}
+							<div>
+								<Label for={`savings-fee-${pension.id}`}>Annual fee (% of balance)</Label>
+								<Input
+									id={`savings-fee-${pension.id}`}
+									type="number"
+									min="0"
+									max="100"
+									step="0.01"
+									bind:value={pension.annualFeeRate}
+								/>
+							</div>
+							<div>
+								<Label for={`savings-bonus-${pension.id}`}
+									>Additional bonus (% of contributions)</Label
+								>
+								<Input
+									id={`savings-bonus-${pension.id}`}
+									type="number"
+									min="0"
+									max="100"
+									step="0.1"
+									placeholder="e.g., 25% for LISA"
+									bind:value={pension.bonusRate}
+								/>
+							</div>
 						</div>
-						<div>
-							<Label for={`savings-bonus-${pension.id}`}
-								>Additional bonus (% of contributions)</Label
-							>
-							<Input
-								id={`savings-bonus-${pension.id}`}
-								type="number"
-								min="0"
-								max="100"
-								step="0.1"
-								placeholder="e.g., 25% for LISA"
-								bind:value={pension.bonusRate}
-							/>
-						</div>
-					</div>
+					</details>
 					<p class="pension-note">
 						Contributions and any bonus arrive at the end of each period. Returns and fees compound
 						during the period. The bonus is illustrative; eligibility and annual limits are not

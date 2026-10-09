@@ -34,9 +34,8 @@ export function personalSavingsResult(
 	const targetAge = number(retirementAge, "target retirement age", age, 120);
 	if (!Number.isInteger(targetAge)) throw new Error("Enter a valid target retirement age");
 	const endAge =
-		savings.endAge === "" ? null : number(savings.endAge, "contribution end age", 18, 120);
-	if (endAge !== null && !Number.isInteger(endAge))
-		throw new Error("Enter a whole-year contribution end age");
+		savings.endAge === "" ? targetAge : number(savings.endAge, "contribution end age", 18, 120);
+	if (!Number.isInteger(endAge)) throw new Error("Enter a whole-year contribution end age");
 	if (!Object.hasOwn(periods, savings.contributionFrequency))
 		throw new Error("Choose a contribution frequency");
 	if (!Object.hasOwn(returnRates, savings.returnMode) && savings.returnMode !== "custom") {
@@ -52,9 +51,6 @@ export function personalSavingsResult(
 		number(savings.contributionIncreaseRate, "annual contribution increase", -99.99, 100) / 100;
 	const contributionAmount = optionalNumber(savings.contributionAmount, "contribution amount");
 	const currentBalance = optionalNumber(savings.currentBalance, "current balance");
-	if (contributionAmount > 0 && endAge === null && targetAge > age) {
-		throw new Error("Enter the age when contributions end");
-	}
 	const count = periods[savings.contributionFrequency];
 	const periodReturn = (1 + returnRate) ** (1 / count) - 1;
 	const periodFee = 1 - (1 - annualFeeRate) ** (1 / count);

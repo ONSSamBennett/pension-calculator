@@ -456,6 +456,31 @@
 	margin-top: 24px;
 }
 
+.pension-advanced-settings {
+	margin-top: 20px;
+	border-top: 1px solid #dce5dd;
+}
+
+.pension-advanced-settings > summary {
+	padding: 14px 0;
+	color: var(--accent);
+	font-weight: 700;
+	cursor: pointer;
+}
+
+.pension-advanced-settings > summary:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 2px;
+}
+
+.pension-advanced-settings[open] > summary {
+	padding-bottom: 0;
+}
+
+.pension-advanced-settings[open] .pension-extra-fields {
+	margin-top: 14px;
+}
+
 .pension-note {
 	color: var(--muted);
 	font-size: 14px;

@@ -192,7 +192,7 @@ export function createDefinedBenefit(id, annualInflationRate = DEFAULT_INFLATION
 		startAge: 65,
 		serviceStartAge: "",
 		leaveAge: "",
-		accrualDenominator: "",
+		accrualDenominator: 60,
 		payGrowthRate: annualInflationRate,
 		adjustmentRate: 0,
 		lumpSum: "",

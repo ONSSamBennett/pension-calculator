@@ -37,6 +37,7 @@ Keep this section current as the pensions calculator takes shape. For each meani
 - **2026-10-08 - Pension draft import/export:** The version-15 document is the single JSON contract for settings, current age, pension sources, and all withdrawals assumptions, including per-pot drawdown settings. Import validates JSON parsing, HTTP(S) response content type for URLs, and the full document with `fromDocument`; apply it only after validation and explicit submission. Save by directly downloading `mypension.json`; do not invoke the browser file-location picker.
 
 - **2026-10-08 - CARE revaluation default:** New defined-benefit entries initialize the editable CARE revaluation rate to the configured annual inflation rate (2.5% initially). Imported or already-saved rates remain unchanged.
+- **2026-10-09 - Standard and advanced pension inputs:** Keep each pension type's core inputs visible and place optional assumptions in a collapsed Advanced settings disclosure. State Pension standardizes qualifying age; DB standardizes service ages, scheme, pay, normal age and a default 60 denominator; DC standardizes contribution ages, pay and contribution rates; personal savings standardizes balance, frequency and contribution. Keep all property inputs visible. This is a presentation-only change; preserve the existing draft fields and calculation behavior.
 
 ## Commands
 
