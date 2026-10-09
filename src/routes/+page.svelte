@@ -2,6 +2,7 @@
 	import { getContext } from "svelte";
 	import { resolve } from "$app/paths";
 	import { Button, Card, Input, Label, Select } from "flowbite-svelte";
+	import AgeRangeControl from "$lib/AgeRangeControl.svelte";
 	import {
 		createDefinedBenefit,
 		createDefinedContribution,
@@ -100,6 +101,18 @@
 			outflows: [{ flows: result.futureFlows, field: "fees" }]
 		});
 	}
+
+	function isValidSliderAge(value) {
+		if (value === "" || value === null || value === undefined) return false;
+		const age = Number(value);
+		return Number.isInteger(age) && age >= 18 && age <= 120;
+	}
+
+	const pensionAgeRangeIsValid = $derived(
+		isValidSliderAge(draft.currentAge) &&
+			isValidSliderAge(draft.retirementAge) &&
+			Number(draft.retirementAge) >= Number(draft.currentAge)
+	);
 
 	function addPension() {
 		draft.pensions.push({ id: draft.nextId++, kind: "unselected", name: "", amount: "" });
@@ -221,34 +234,24 @@
 
 <div class="pension-workspace pension-pensions-workspace">
 	<section aria-labelledby="pensions-heading" class="pension-content">
-		<div class="pension-age-field">
-			<Label for="current-age">Current age</Label>
-			<Input
-				id="current-age"
-				type="number"
-				min="18"
-				max="120"
-				step="1"
-				bind:value={draft.currentAge}
-			/>
-			{#if draft.currentAge === "" || !Number.isInteger(Number(draft.currentAge)) || Number(draft.currentAge) < 18 || Number(draft.currentAge) > 120}
-				<p class="pension-error">Enter your current age between 18 and 120.</p>
-			{/if}
-		</div>
-		<div class="pension-age-field">
-			<Label for="target-retirement-age">Target retirement age</Label>
-			<Input
-				id="target-retirement-age"
-				type="number"
-				min="18"
-				max="120"
-				step="1"
-				bind:value={draft.retirementAge}
-			/>
-			{#if draft.retirementAge === "" || !Number.isInteger(Number(draft.retirementAge)) || Number(draft.retirementAge) < Number(draft.currentAge) || Number(draft.retirementAge) > 120}
-				<p class="pension-error">Enter a target retirement age from your current age to 120.</p>
-			{/if}
-		</div>
+		<AgeRangeControl
+			firstId="current-age"
+			secondId="target-retirement-age"
+			firstLabel="Current age"
+			secondLabel="Target retirement age"
+			bind:firstValue={draft.currentAge}
+			bind:secondValue={draft.retirementAge}
+			min={18}
+			max={120}
+			minGap={0}
+			firstError={!isValidSliderAge(draft.currentAge)
+				? "Enter your current age between 18 and 120."
+				: ""}
+			secondError={!pensionAgeRangeIsValid
+				? "Enter a target retirement age from your current age to 120."
+				: ""}
+			disabled={!pensionAgeRangeIsValid}
+		/>
 		<div class="pension-section-heading">
 			<div>
 				<h2 id="pensions-heading">Pension sources</h2>

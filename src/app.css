@@ -314,18 +314,63 @@
 	gap: 16px;
 }
 
-.pension-age-field {
-	max-width: 220px;
-	margin-bottom: 20px;
+.pension-age-control-row {
+	display: grid;
+	grid-template-columns: minmax(116px, 140px) minmax(0, 1fr) minmax(116px, 140px);
+	align-items: start;
+	gap: 16px;
+	margin-bottom: 36px;
 }
 
-.pension-age-field + .pension-age-field {
-	margin-bottom: 36px;
+.pension-age-field {
+	min-width: 0;
+}
+
+.pension-age-field input {
+	width: 100%;
+	min-width: 0;
+	padding-inline: 8px;
+}
+
+.pension-age-control-row .pension-age-range {
+	width: 100%;
+	min-width: 0;
+	max-width: none;
+	margin: 26px 0 0;
+	padding: 0;
+}
+
+.pension-age-range {
+	max-width: 760px;
+	margin: 12px 0 36px;
+	padding: 0 12px;
+}
+
+.pension-withdrawal-age-control {
+	grid-column: 1 / -1;
+	width: 100%;
+	max-width: none;
+	margin-bottom: 0;
+}
+
+.pension-age-range-slider.rangeSlider {
+	--range-slider: #dce5dd;
+	--range-handle: var(--accent);
+	--range-handle-focus: var(--accent);
+	--range-handle-border: var(--accent);
+	--range-range: #6fa98c;
 }
 
 .pension-age-field label {
 	display: block;
 	margin-bottom: 8px;
+}
+
+.pension-age-control-row > .pension-age-field:last-child label {
+	font-size: 12px;
+	line-height: 1.2;
+	text-align: right;
+	white-space: nowrap;
 }
 
 .pension-section-heading {
@@ -659,7 +704,7 @@
 
 .pension-projection-divider {
 	margin: 24px 0;
-	border: 0;
+	margin-top: 18px;
 	border-top: 1px solid rgb(0 0 0 / 18%);
 }
 
@@ -721,6 +766,30 @@
 
 	.pension-withdrawals-footer {
 		display: none;
+	}
+}
+
+@media (min-width: 761px) and (max-width: 1000px) {
+	.pension-age-control-row {
+		grid-template-columns: minmax(112px, 1fr) minmax(72px, 1fr) minmax(112px, 1fr);
+		gap: 8px;
+	}
+
+	.pension-age-control-row .pension-age-field input {
+		max-width: 140px;
+	}
+
+	.pension-age-control-row > .pension-age-field:last-child input {
+		display: block;
+		margin-left: auto;
+	}
+
+	.pension-age-control-row .pension-age-range {
+		margin-top: 42px;
+	}
+
+	.pension-age-control-row .pension-age-range-slider.rangeSlider {
+		margin: 0;
 	}
 }
 
@@ -786,6 +855,38 @@
 	.pension-workspace {
 		grid-template-columns: 1fr;
 		gap: 32px;
+	}
+
+	.pension-age-control-row {
+		grid-template-columns: minmax(118px, 1fr) minmax(0, 2fr) minmax(118px, 1fr);
+		gap: 8px;
+		margin-bottom: 28px;
+	}
+
+	.pension-age-control-row .pension-age-field label {
+		display: block;
+		min-height: 1.2em;
+		margin-bottom: 4px;
+		font-size: 12px;
+		line-height: 1.2;
+	}
+
+	.pension-age-control-row > .pension-age-field:last-child label {
+		text-align: right;
+		white-space: nowrap;
+	}
+
+	.pension-age-control-row .pension-age-field input {
+		max-width: 140px;
+	}
+
+	.pension-age-control-row > .pension-age-field:last-child input {
+		display: block;
+		margin-left: auto;
+	}
+
+	.pension-age-control-row .pension-age-range {
+		margin-top: 18px;
 	}
 
 	.pension-withdrawals-workspace {
@@ -876,6 +977,46 @@
 
 .pension-projection-panel {
 	width: 100%;
+}
+
+@media (max-width: 450px) {
+	.pension-age-control-row {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		row-gap: 12px;
+	}
+
+	.pension-age-control-row > .pension-age-field:first-child {
+		grid-column: 1;
+		grid-row: 1;
+	}
+
+	.pension-age-control-row > .pension-age-field:last-child {
+		grid-column: 2;
+		grid-row: 1;
+	}
+
+	.pension-age-control-row > .pension-age-range {
+		grid-column: 1 / -1;
+		grid-row: 2;
+		margin: 0;
+	}
+
+	.pension-age-control-row .pension-age-field label {
+		display: block;
+		min-height: 0;
+		margin-bottom: 4px;
+		font-size: 12px;
+		line-height: 1.2;
+	}
+
+	.pension-age-control-row .pension-age-field input {
+		max-width: 112px;
+	}
+
+	.pension-age-control-row .pension-age-range-slider.rangeSlider {
+		width: 100%;
+		margin: 12px 0;
+	}
 }
 
 @media (max-width: 480px) {

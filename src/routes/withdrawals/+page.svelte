@@ -1,6 +1,7 @@
 <script>
 	import { getContext } from "svelte";
 	import { Button, Card, Input, Label, Select } from "flowbite-svelte";
+	import AgeRangeControl from "$lib/AgeRangeControl.svelte";
 	import { resolve } from "$app/paths";
 	import { realTermsValue } from "$lib/real-terms.js";
 	import { isValidPlanAge } from "$lib/retirement-income-chart.js";
@@ -25,12 +26,42 @@
 	];
 
 	function updatePlanUntilAge(event) {
-		planUntilInput = event.currentTarget.value;
-		const age = Number(planUntilInput);
-		if (isValidPlanAge(draft.retirementAge, planUntilInput)) {
+		planUntilInput = event;
+		const age = Number(event);
+		if (isValidPlanAge(draft.retirementAge, event)) {
 			draft.finalAge = age;
 		}
 	}
+
+	function isValidAge(value) {
+		if (value === "" || value === null || value === undefined) return false;
+		const age = Number(value);
+		return Number.isInteger(age) && age >= 18 && age <= 120;
+	}
+
+	const currentAgeMinimum = $derived(isValidAge(draft.currentAge) ? Number(draft.currentAge) : 18);
+	const retirementAgeIsValid = $derived(
+		isValidAge(draft.currentAge) &&
+			isValidAge(draft.retirementAge) &&
+			Number(draft.retirementAge) >= currentAgeMinimum &&
+			Number(draft.retirementAge) < 120
+	);
+	const planAgeIsValid = $derived(isValidPlanAge(draft.retirementAge, planUntilInput));
+	const withdrawalAgeRangeIsValid = $derived(retirementAgeIsValid && planAgeIsValid);
+	const retirementAgeError = $derived(
+		!isValidAge(draft.currentAge)
+			? "Enter a valid current age on the pensions page."
+			: !retirementAgeIsValid
+				? `Enter a retirement age from ${currentAgeMinimum} to 119.`
+				: ""
+	);
+
+	function updateWithdrawalAgeRange(retirementAge, finalAge) {
+		draft.retirementAge = retirementAge;
+		draft.finalAge = finalAge;
+		planUntilInput = String(finalAge);
+	}
+
 	function amountInSelectedTerms(item) {
 		return priceDisplay.realTerms
 			? realTermsValue(
@@ -76,33 +107,26 @@
 			</div>
 		</div>
 		<div class="pension-fields pension-withdrawal-fields">
-			<div>
-				<Label for="retirement-age">Retirement age</Label>
-				<Input
-					id="retirement-age"
-					type="number"
-					min="18"
-					max="120"
-					bind:value={draft.retirementAge}
-				/>
-			</div>
-			<div>
-				<Label for="final-age">Plan until age</Label>
-				<Input
-					id="final-age"
-					type="number"
-					min={Number(draft.retirementAge) + 1}
-					max="120"
-					value={planUntilInput}
-					oninput={updatePlanUntilAge}
-				/>
-				{#if !isValidPlanAge(draft.retirementAge, planUntilInput)}
-					<p class="pension-error">
-						Enter a whole-number plan age greater than retirement age and no more than 120.
-					</p>
-				{/if}
-			</div>
-			<div>
+			<AgeRangeControl
+				className="pension-withdrawal-age-control"
+				firstId="retirement-age"
+				secondId="final-age"
+				firstLabel="Retirement age"
+				secondLabel="Plan until age"
+				bind:firstValue={draft.retirementAge}
+				bind:secondValue={planUntilInput}
+				min={currentAgeMinimum}
+				max={120}
+				minGap={1}
+				firstError={retirementAgeError}
+				secondError={!planAgeIsValid
+					? "Enter a whole-number plan age greater than retirement age and no more than 120."
+					: ""}
+				disabled={!withdrawalAgeRangeIsValid}
+				onSecondInput={updatePlanUntilAge}
+				onRangeChange={updateWithdrawalAgeRange}
+			/>
+			<div class="pension-withdrawal-income-field">
 				<Label for="annual-income">Target annual income (£, today's prices)</Label>
 				<Input id="annual-income" type="number" min="0" step="1" bind:value={draft.annualIncome} />
 			</div>
